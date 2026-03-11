@@ -160,6 +160,20 @@ type OpusDecoder = {
 let warnedOpusMissing = false;
 
 function createOpusDecoder(): { decoder: OpusDecoder; name: string } | null {
+  // Try @discordjs/opus first (native, faster, more stable)
+  try {
+    const DiscordOpus = require("@discordjs/opus") as {
+      OpusEncoder: {
+        new (sampleRate: number, channels: number): OpusDecoder;
+      };
+    };
+    const decoder = new DiscordOpus.OpusEncoder(SAMPLE_RATE, CHANNELS);
+    return { decoder, name: "@discordjs/opus" };
+  } catch {
+    // Fall through to opusscript
+  }
+
+  // Fallback to opusscript (pure JS/WASM, slower but no native deps)
   try {
     const OpusScript = require("opusscript") as {
       new (sampleRate: number, channels: number, application: number): OpusDecoder;
@@ -171,7 +185,7 @@ function createOpusDecoder(): { decoder: OpusDecoder; name: string } | null {
     if (!warnedOpusMissing) {
       warnedOpusMissing = true;
       logger.warn(
-        `discord voice: opusscript unavailable (${formatErrorMessage(err)}); cannot decode voice audio`,
+        `discord voice: opus decoder unavailable (${formatErrorMessage(err)}); cannot decode voice audio`,
       );
     }
   }
