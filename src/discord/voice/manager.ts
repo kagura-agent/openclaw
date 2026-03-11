@@ -651,9 +651,11 @@ export class DiscordVoiceManager {
     logVoiceVerbose(
       `transcription ok (${transcript.length} chars): guild ${entry.guildId} channel ${entry.channelId}`,
     );
+    logVoiceVerbose(`transcription text: ${JSON.stringify(transcript)}`);
 
     const speaker = await this.resolveSpeakerContext(entry.guildId, userId);
     const prompt = speaker.label ? `${speaker.label}: ${transcript}` : transcript;
+    logVoiceVerbose(`sending to agent: ${JSON.stringify(prompt)}`);
 
     const result = await agentCommandFromIngress(
       {
