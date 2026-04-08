@@ -336,7 +336,10 @@ describe("loadWorkspaceSkillEntries", () => {
     "calls out bundled symlink escapes as likely local checkout mutations",
     async () => {
       const workspaceDir = await createTempWorkspaceDir();
-      const bundledDir = path.join(workspaceDir, ".bundled");
+      // Use a deeper bundled dir structure to match real layout:
+      // <base>/dist-runtime/extensions — 2 levels up gives <base>/
+      // The outsideDir must be outside <base>/ to trigger the escape.
+      const bundledDir = path.join(workspaceDir, "dist-runtime", "extensions");
       const outsideDir = await createTempWorkspaceDir();
       const escapedSkillDir = path.join(outsideDir, "outside-bundled-skill");
       await writeSkill({
@@ -376,10 +379,14 @@ describe("loadWorkspaceSkillEntries", () => {
   it.runIf(process.platform !== "win32")(
     "uses compact home-relative paths in escaped skill console warnings",
     async () => {
+      // Use a deeper bundled dir structure (dist-runtime/extensions) so the
+      // outsideDir truly escapes the allowed symlink-target boundary.
+      // 2 levels up from workspace/dist-runtime/extensions = workspace/,
+      // and outside/ is NOT inside workspace/.
       const workspaceDir = path.join(fakeHome, "workspace");
       const outsideDir = path.join(fakeHome, "outside");
       tempDirs.push(workspaceDir, outsideDir);
-      const bundledDir = path.join(workspaceDir, ".bundled");
+      const bundledDir = path.join(workspaceDir, "dist-runtime", "extensions");
       const escapedSkillDir = path.join(outsideDir, "outside-bundled-skill");
       await writeSkill({
         dir: escapedSkillDir,
@@ -405,8 +412,10 @@ describe("loadWorkspaceSkillEntries", () => {
 
       const [line] = warn.mock.calls[0] ?? [];
       const warningLine = String(line);
-      expect(warningLine).toContain("root=~/workspace/.bundled");
-      expect(warningLine).toContain("requested=~/workspace/.bundled/escaped-bundled-skill");
+      expect(warningLine).toContain("root=~/workspace/dist-runtime/extensions");
+      expect(warningLine).toContain(
+        "requested=~/workspace/dist-runtime/extensions/escaped-bundled-skill",
+      );
       expect(warningLine).toContain("resolved=~/outside/outside-bundled-skill");
     },
   );

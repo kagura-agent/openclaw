@@ -251,6 +251,9 @@ function resolveContainedSkillPath(params: {
   rootDir: string;
   rootRealPath: string;
   candidatePath: string;
+  allowSymlinks?: boolean;
+  /** When allowSymlinks is true, the resolved symlink target must also be inside this directory. */
+  allowedSymlinkTarget?: string;
 }): string | null {
   const candidateRealPath = tryRealpath(params.candidatePath);
   if (!candidateRealPath) {
@@ -258,6 +261,20 @@ function resolveContainedSkillPath(params: {
   }
   if (isPathInside(params.rootRealPath, candidateRealPath)) {
     return candidateRealPath;
+  }
+  // Fallback: accept paths that are logically inside the root even when
+  // internal symlinks (e.g. dist-runtime SKILL.md → dist/) cause the
+  // resolved path to land outside the resolved root.
+  // Security: also verify the resolved symlink target is within the allowed boundary.
+  if (params.allowSymlinks && params.allowedSymlinkTarget) {
+    const resolvedCandidate = path.resolve(params.candidatePath);
+    const resolvedTarget = path.resolve(params.allowedSymlinkTarget);
+    if (
+      isPathInside(params.rootDir, resolvedCandidate) &&
+      isPathInside(resolvedTarget, candidateRealPath)
+    ) {
+      return candidateRealPath;
+    }
   }
   warnEscapedSkillPath({
     source: params.source,
@@ -274,6 +291,8 @@ function filterLoadedSkillsInsideRoot(params: {
   source: string;
   rootDir: string;
   rootRealPath: string;
+  allowSymlinks?: boolean;
+  allowedSymlinkTarget?: string;
 }): Skill[] {
   return params.skills.filter((skill) => {
     const baseDirRealPath = resolveContainedSkillPath({
@@ -281,6 +300,8 @@ function filterLoadedSkillsInsideRoot(params: {
       rootDir: params.rootDir,
       rootRealPath: params.rootRealPath,
       candidatePath: skill.baseDir,
+      allowSymlinks: params.allowSymlinks,
+      allowedSymlinkTarget: params.allowedSymlinkTarget,
     });
     if (!baseDirRealPath) {
       return false;
@@ -290,6 +311,8 @@ function filterLoadedSkillsInsideRoot(params: {
       rootDir: params.rootDir,
       rootRealPath: params.rootRealPath,
       candidatePath: skill.filePath,
+      allowSymlinks: params.allowSymlinks,
+      allowedSymlinkTarget: params.allowedSymlinkTarget,
     });
     return Boolean(skillFileRealPath);
   });
@@ -348,7 +371,12 @@ function loadSkillEntries(
 ): SkillEntry[] {
   const limits = resolveSkillsLimits(opts?.config);
 
-  const loadSkills = (params: { dir: string; source: string }): Skill[] => {
+  const loadSkills = (params: {
+    dir: string;
+    source: string;
+    allowSymlinks?: boolean;
+    allowedSymlinkTarget?: string;
+  }): Skill[] => {
     const rootDir = path.resolve(params.dir);
     const rootRealPath = tryRealpath(rootDir) ?? rootDir;
     const resolved = resolveNestedSkillsRoot(params.dir, {
@@ -360,6 +388,8 @@ function loadSkillEntries(
       rootDir,
       rootRealPath,
       candidatePath: baseDir,
+      allowSymlinks: params.allowSymlinks,
+      allowedSymlinkTarget: params.allowedSymlinkTarget,
     });
     if (!baseDirRealPath) {
       return [];
@@ -373,6 +403,8 @@ function loadSkillEntries(
         rootDir,
         rootRealPath: baseDirRealPath,
         candidatePath: rootSkillMd,
+        allowSymlinks: params.allowSymlinks,
+        allowedSymlinkTarget: params.allowedSymlinkTarget,
       });
       if (!rootSkillRealPath) {
         return [];
@@ -396,12 +428,16 @@ function loadSkillEntries(
         dir: baseDir,
         source: params.source,
         maxBytes: limits.maxSkillFileBytes,
+        allowSymlinks: params.allowSymlinks,
+        allowedSymlinkTarget: params.allowedSymlinkTarget,
       });
       return filterLoadedSkillsInsideRoot({
         skills: unwrapLoadedSkills(loaded),
         source: params.source,
         rootDir,
         rootRealPath: baseDirRealPath,
+        allowSymlinks: params.allowSymlinks,
+        allowedSymlinkTarget: params.allowedSymlinkTarget,
       });
     }
 
@@ -438,6 +474,8 @@ function loadSkillEntries(
         rootDir,
         rootRealPath: baseDirRealPath,
         candidatePath: skillDir,
+        allowSymlinks: params.allowSymlinks,
+        allowedSymlinkTarget: params.allowedSymlinkTarget,
       });
       if (!skillDirRealPath) {
         continue;
@@ -451,6 +489,8 @@ function loadSkillEntries(
         rootDir,
         rootRealPath: baseDirRealPath,
         candidatePath: skillMd,
+        allowSymlinks: params.allowSymlinks,
+        allowedSymlinkTarget: params.allowedSymlinkTarget,
       });
       if (!skillMdRealPath) {
         continue;
@@ -474,6 +514,8 @@ function loadSkillEntries(
         dir: skillDir,
         source: params.source,
         maxBytes: limits.maxSkillFileBytes,
+        allowSymlinks: params.allowSymlinks,
+        allowedSymlinkTarget: params.allowedSymlinkTarget,
       });
       loadedSkills.push(
         ...filterLoadedSkillsInsideRoot({
@@ -481,6 +523,8 @@ function loadSkillEntries(
           source: params.source,
           rootDir,
           rootRealPath: baseDirRealPath,
+          allowSymlinks: params.allowSymlinks,
+          allowedSymlinkTarget: params.allowedSymlinkTarget,
         }),
       );
 
@@ -514,6 +558,11 @@ function loadSkillEntries(
     ? loadSkills({
         dir: bundledSkillsDir,
         source: "openclaw-bundled",
+        allowSymlinks: true,
+        // The bundled dir is typically <package>/dist-runtime/extensions.
+        // Symlinks may point to <package>/dist/extensions. The common ancestor
+        // (package root) is two levels up from the bundled dir.
+        allowedSymlinkTarget: path.resolve(bundledSkillsDir, "..", ".."),
       })
     : [];
   const extraSkills = mergedExtraDirs.flatMap((dir) => {
