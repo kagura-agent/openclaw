@@ -328,6 +328,46 @@ describe("bedrock mantle discovery", () => {
   // Implicit provider resolution
   // ---------------------------------------------------------------------------
 
+  it("skips discovery when discoveryConfig.enabled is false", async () => {
+    const provider = await resolveImplicitMantleProvider({
+      env: {
+        AWS_BEARER_TOKEN_BEDROCK: "my-token", // pragma: allowlist secret
+        AWS_REGION: "us-east-1",
+      } as NodeJS.ProcessEnv,
+      discoveryConfig: { enabled: false },
+    });
+
+    expect(provider).toBeNull();
+  });
+
+  it("skips discovery when enabled is not true and no AWS creds are present", async () => {
+    const provider = await resolveImplicitMantleProvider({
+      env: {} as NodeJS.ProcessEnv,
+    });
+
+    expect(provider).toBeNull();
+  });
+
+  it("runs discovery when discoveryConfig.enabled is true even without env creds", async () => {
+    const tokenProvider = vi.fn(async () => "bedrock-api-key-forced"); // pragma: allowlist secret
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: [{ id: "anthropic.claude-sonnet-4-6", object: "model" }],
+      }),
+    });
+    mocks.getTokenProvider.mockReturnValue(tokenProvider);
+
+    const provider = await resolveImplicitMantleProvider({
+      env: { AWS_REGION: "us-east-1" } as NodeJS.ProcessEnv,
+      fetchFn: mockFetch as unknown as typeof fetch,
+      discoveryConfig: { enabled: true },
+    });
+
+    expect(provider).not.toBeNull();
+    expect(provider?.models).toHaveLength(1);
+  });
+
   it("resolves implicit provider when bearer token is set", async () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,

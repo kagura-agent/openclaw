@@ -1,5 +1,6 @@
 import { createSubsystemLogger } from "openclaw/plugin-sdk/core";
 import { formatErrorMessage } from "openclaw/plugin-sdk/error-runtime";
+import { resolveAwsSdkEnvVarName } from "openclaw/plugin-sdk/provider-auth-runtime";
 import type {
   ModelDefinitionConfig,
   ModelProviderConfig,
@@ -257,10 +258,20 @@ export async function discoverMantleModels(params: {
 export async function resolveImplicitMantleProvider(params: {
   env?: NodeJS.ProcessEnv;
   fetchFn?: typeof fetch;
+  discoveryConfig?: { enabled?: boolean };
 }): Promise<ModelProviderConfig | null> {
+  const enabled = params.discoveryConfig?.enabled;
+  if (enabled === false) {
+    return null;
+  }
+
   const env = params.env ?? process.env;
   const region = env.AWS_REGION ?? env.AWS_DEFAULT_REGION ?? "us-east-1";
   const explicitBearerToken = resolveMantleBearerToken(env);
+
+  if (enabled !== true && !explicitBearerToken && resolveAwsSdkEnvVarName(env) === undefined) {
+    return null;
+  }
 
   if (!isSupportedRegion(region)) {
     log.debug?.("Mantle not available in region", { region });

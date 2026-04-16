@@ -16,8 +16,10 @@ export function registerBedrockMantlePlugin(api: OpenClawPluginApi): void {
     catalog: {
       order: "simple",
       run: async (ctx) => {
+        const pluginConfig = (api.pluginConfig ?? {}) as { discovery?: { enabled?: boolean } };
         const implicit = await resolveImplicitMantleProvider({
           env: ctx.env,
+          discoveryConfig: pluginConfig.discovery,
         });
         if (!implicit) {
           return null;
