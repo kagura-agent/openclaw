@@ -23,7 +23,23 @@ export type {
   SandboxFsBridgeContext,
 } from "./backend-handle.types.js";
 
-const SANDBOX_BACKEND_FACTORIES = new Map<SandboxBackendId, RegisteredSandboxBackend>();
+// Use globalThis + Symbol.for so that plugin Jiti loaders (which may create a
+// separate module instance of this file) share the same registry as core.
+const SANDBOX_BACKEND_FACTORIES_KEY = Symbol.for("openclaw.sandboxBackendFactories");
+
+type GlobalWithSandboxBackends = typeof globalThis & {
+  [key: symbol]: Map<SandboxBackendId, RegisteredSandboxBackend> | undefined;
+};
+
+function getSandboxBackendFactoriesMap(): Map<SandboxBackendId, RegisteredSandboxBackend> {
+  const g = globalThis as GlobalWithSandboxBackends;
+  let map = g[SANDBOX_BACKEND_FACTORIES_KEY];
+  if (!map) {
+    map = new Map();
+    g[SANDBOX_BACKEND_FACTORIES_KEY] = map;
+  }
+  return map;
+}
 
 function normalizeSandboxBackendId(id: string): SandboxBackendId {
   const normalized = normalizeOptionalLowercaseString(id);
@@ -39,23 +55,24 @@ export function registerSandboxBackend(
 ): () => void {
   const normalizedId = normalizeSandboxBackendId(id);
   const resolved = typeof registration === "function" ? { factory: registration } : registration;
-  const previous = SANDBOX_BACKEND_FACTORIES.get(normalizedId);
-  SANDBOX_BACKEND_FACTORIES.set(normalizedId, resolved);
+  const factories = getSandboxBackendFactoriesMap();
+  const previous = factories.get(normalizedId);
+  factories.set(normalizedId, resolved);
   return () => {
     if (previous) {
-      SANDBOX_BACKEND_FACTORIES.set(normalizedId, previous);
+      getSandboxBackendFactoriesMap().set(normalizedId, previous);
       return;
     }
-    SANDBOX_BACKEND_FACTORIES.delete(normalizedId);
+    getSandboxBackendFactoriesMap().delete(normalizedId);
   };
 }
 
 export function getSandboxBackendFactory(id: string): SandboxBackendFactory | null {
-  return SANDBOX_BACKEND_FACTORIES.get(normalizeSandboxBackendId(id))?.factory ?? null;
+  return getSandboxBackendFactoriesMap().get(normalizeSandboxBackendId(id))?.factory ?? null;
 }
 
 export function getSandboxBackendManager(id: string): SandboxBackendManager | null {
-  return SANDBOX_BACKEND_FACTORIES.get(normalizeSandboxBackendId(id))?.manager ?? null;
+  return getSandboxBackendFactoriesMap().get(normalizeSandboxBackendId(id))?.manager ?? null;
 }
 
 export function requireSandboxBackendFactory(id: string): SandboxBackendFactory {
