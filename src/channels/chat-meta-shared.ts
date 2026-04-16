@@ -1,5 +1,8 @@
 import type { PluginPackageChannel } from "../plugins/manifest.js";
-import { normalizeOptionalString } from "../shared/string-coerce.js";
+import {
+  normalizeOptionalLowercaseString,
+  normalizeOptionalString,
+} from "../shared/string-coerce.js";
 import { listBundledChannelCatalogEntries } from "./bundled-channel-catalog-read.js";
 import { CHAT_CHANNEL_ORDER, type ChatChannelId } from "./ids.js";
 import { resolveChannelExposure } from "./plugins/exposure.js";
@@ -66,7 +69,7 @@ export function buildChatChannelMetaById(): Record<ChatChannelId, ChatChannelMet
   const entries = new Map<ChatChannelId, ChatChannelMeta>();
 
   for (const entry of listBundledChannelCatalogEntries()) {
-    const rawId = normalizeOptionalString(entry.id);
+    const rawId = normalizeOptionalLowercaseString(entry.id);
     if (!rawId || !CHAT_CHANNEL_ID_SET.has(rawId)) {
       continue;
     }
