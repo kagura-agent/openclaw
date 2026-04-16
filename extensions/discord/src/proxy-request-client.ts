@@ -301,6 +301,11 @@ class ProxyRequestClientCompat {
       };
       formData.append("payload_json", JSON.stringify(cleanedBody));
       body = formData;
+      // Remove any pre-set Content-Type so fetch auto-sets multipart/form-data
+      // with the correct boundary. Without this, an explicit Content-Type
+      // (e.g. application/json from data.headers) would prevent Discord from
+      // recognizing the multipart upload.
+      headers.delete("Content-Type");
     } else if (data?.body != null) {
       headers.set("Content-Type", "application/json");
       body = data.rawBody ? (data.body as BodyInit) : JSON.stringify(data.body);
