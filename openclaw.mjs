@@ -38,6 +38,22 @@ const ensureSupportedNodeVersion = () => {
 
 ensureSupportedNodeVersion();
 
+const ensureNotRoot = () => {
+  if (
+    typeof process.getuid === "function" &&
+    process.getuid() === 0 &&
+    !process.env.OPENCLAW_ALLOW_ROOT
+  ) {
+    process.stderr.write(
+      "openclaw: refusing to run as root. Running as root causes state corruption and crash loops.\n" +
+        "If you really need this (Docker, CI), set OPENCLAW_ALLOW_ROOT=1.\n",
+    );
+    process.exit(1);
+  }
+};
+
+ensureNotRoot();
+
 // https://nodejs.org/api/module.html#module-compile-cache
 if (module.enableCompileCache && !process.env.NODE_DISABLE_COMPILE_CACHE) {
   try {
