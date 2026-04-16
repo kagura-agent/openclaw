@@ -73,7 +73,8 @@ export function releasePluginInteractiveCallbackDedupe(dedupeKey: string | undef
 }
 
 export function clearPluginInteractiveHandlersState(): void {
-  getPluginInteractiveHandlersState().clear();
-  getPluginInteractiveCallbackDedupeState().clear();
-  getState().inflightCallbackDedupe.clear();
+  const state = getState();
+  state.interactiveHandlers?.clear();
+  state.callbackDedupe?.clear();
+  state.inflightCallbackDedupe?.clear();
 }
