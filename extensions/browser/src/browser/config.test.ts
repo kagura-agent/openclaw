@@ -459,4 +459,26 @@ describe("browser config", () => {
       expect(resolved.defaultProfile).toBe("custom");
     });
   });
+
+  describe("executablePath tilde expansion", () => {
+    it("expands ~ prefix to home directory", () => {
+      const resolved = resolveBrowserConfig({
+        executablePath: "~/.local/chromium/chrome",
+      });
+      expect(resolved.executablePath).not.toContain("~");
+      expect(resolved.executablePath).toContain(".local/chromium/chrome");
+    });
+
+    it("preserves absolute paths without tilde", () => {
+      const resolved = resolveBrowserConfig({
+        executablePath: "/usr/bin/chromium",
+      });
+      expect(resolved.executablePath).toBe("/usr/bin/chromium");
+    });
+
+    it("returns undefined when executablePath is not set", () => {
+      const resolved = resolveBrowserConfig({});
+      expect(resolved.executablePath).toBeUndefined();
+    });
+  });
 });
