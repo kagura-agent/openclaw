@@ -586,6 +586,14 @@ export async function* parseNdjsonStream(
   }
 }
 
+/**
+ * Strip the `ollama/` provider prefix from a model id so the bare model name
+ * is sent to the Ollama API (which does not accept provider-prefixed ids).
+ */
+function stripOllamaModelPrefix(modelId: string): string {
+  return modelId.startsWith("ollama/") ? modelId.slice("ollama/".length) : modelId;
+}
+
 function resolveOllamaChatUrl(baseUrl: string): string {
   const trimmed = baseUrl.trim().replace(/\/+$/, "");
   const normalizedBase = trimmed.replace(/\/v1$/i, "");
@@ -627,7 +635,7 @@ export function createOllamaStreamFn(
         }
 
         const body = buildOllamaChatRequest({
-          modelId: model.id,
+          modelId: stripOllamaModelPrefix(model.id),
           messages: ollamaMessages,
           stream: true,
           tools: ollamaTools,
