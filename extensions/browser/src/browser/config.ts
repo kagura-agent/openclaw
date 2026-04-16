@@ -244,7 +244,8 @@ export function resolveBrowserConfig(
   const headless = cfg?.headless === true;
   const noSandbox = cfg?.noSandbox === true;
   const attachOnly = cfg?.attachOnly === true;
-  const executablePath = normalizeOptionalString(cfg?.executablePath);
+  const rawExecutablePath = normalizeOptionalString(cfg?.executablePath);
+  const executablePath = rawExecutablePath ? resolveUserPath(rawExecutablePath) : undefined;
   const defaultProfileFromConfig = normalizeOptionalString(cfg?.defaultProfile);
 
   const legacyCdpPort = rawCdpUrl ? cdpInfo.port : undefined;
