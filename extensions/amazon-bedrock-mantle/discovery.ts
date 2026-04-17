@@ -269,7 +269,15 @@ export async function resolveImplicitMantleProvider(params: {
   const region = env.AWS_REGION ?? env.AWS_DEFAULT_REGION ?? "us-east-1";
   const explicitBearerToken = resolveMantleBearerToken(env);
 
-  if (enabled !== true && !explicitBearerToken && resolveAwsSdkEnvVarName(env) === undefined) {
+  // Also covers IRSA (EKS) and ECS task role credential env vars
+  if (
+    enabled !== true &&
+    !explicitBearerToken &&
+    resolveAwsSdkEnvVarName(env) === undefined &&
+    !env.AWS_ROLE_ARN &&
+    !env.AWS_CONTAINER_CREDENTIALS_RELATIVE_URI &&
+    !env.AWS_CONTAINER_CREDENTIALS_FULL_URI
+  ) {
     return null;
   }
 

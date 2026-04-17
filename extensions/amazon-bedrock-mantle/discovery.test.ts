@@ -348,6 +348,73 @@ describe("bedrock mantle discovery", () => {
     expect(provider).toBeNull();
   });
 
+  it("runs discovery when AWS_ROLE_ARN is set (EKS IRSA)", async () => {
+    const tokenProvider = vi.fn(async () => "bedrock-api-key-irsa"); // pragma: allowlist secret
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: [{ id: "anthropic.claude-sonnet-4-6", object: "model" }],
+      }),
+    });
+    mocks.getTokenProvider.mockReturnValue(tokenProvider);
+
+    const provider = await resolveImplicitMantleProvider({
+      env: {
+        AWS_ROLE_ARN: "arn:aws:iam::123456789012:role/my-role",
+        AWS_WEB_IDENTITY_TOKEN_FILE: "/var/run/secrets/token",
+        AWS_REGION: "us-east-1",
+      } as NodeJS.ProcessEnv,
+      fetchFn: mockFetch as unknown as typeof fetch,
+    });
+
+    expect(provider).not.toBeNull();
+    expect(provider?.models).toHaveLength(1);
+  });
+
+  it("runs discovery when AWS_CONTAINER_CREDENTIALS_RELATIVE_URI is set (ECS)", async () => {
+    const tokenProvider = vi.fn(async () => "bedrock-api-key-ecs"); // pragma: allowlist secret
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: [{ id: "anthropic.claude-sonnet-4-6", object: "model" }],
+      }),
+    });
+    mocks.getTokenProvider.mockReturnValue(tokenProvider);
+
+    const provider = await resolveImplicitMantleProvider({
+      env: {
+        AWS_CONTAINER_CREDENTIALS_RELATIVE_URI: "/v2/credentials/uuid",
+        AWS_REGION: "us-east-1",
+      } as NodeJS.ProcessEnv,
+      fetchFn: mockFetch as unknown as typeof fetch,
+    });
+
+    expect(provider).not.toBeNull();
+    expect(provider?.models).toHaveLength(1);
+  });
+
+  it("runs discovery when AWS_CONTAINER_CREDENTIALS_FULL_URI is set", async () => {
+    const tokenProvider = vi.fn(async () => "bedrock-api-key-ecs-full"); // pragma: allowlist secret
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: [{ id: "anthropic.claude-sonnet-4-6", object: "model" }],
+      }),
+    });
+    mocks.getTokenProvider.mockReturnValue(tokenProvider);
+
+    const provider = await resolveImplicitMantleProvider({
+      env: {
+        AWS_CONTAINER_CREDENTIALS_FULL_URI: "http://169.254.170.23/v1/credentials",
+        AWS_REGION: "us-east-1",
+      } as NodeJS.ProcessEnv,
+      fetchFn: mockFetch as unknown as typeof fetch,
+    });
+
+    expect(provider).not.toBeNull();
+    expect(provider?.models).toHaveLength(1);
+  });
+
   it("runs discovery when discoveryConfig.enabled is true even without env creds", async () => {
     const tokenProvider = vi.fn(async () => "bedrock-api-key-forced"); // pragma: allowlist secret
     const mockFetch = vi.fn().mockResolvedValue({
