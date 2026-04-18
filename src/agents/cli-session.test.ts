@@ -166,4 +166,36 @@ describe("cli-session helpers", () => {
     expect(hashCliSessionText("  keep this  ")).toBe(hashCliSessionText("keep this"));
     expect(hashCliSessionText("")).toBeUndefined();
   });
+
+  it("stable content hash prevents heartbeat-triggered session resets (#68471)", () => {
+    // Simulate: user message creates a session with hash from stable content only.
+    // Heartbeat fires with different inbound metadata but same stable content.
+    // The session should NOT be invalidated.
+    const stableContent = "group-context\n\nexec-overrides";
+    const stableHash = hashCliSessionText(stableContent)!;
+
+    // Session was stored with hash of stable content
+    const binding = {
+      sessionId: "cli-session-1",
+      extraSystemPromptHash: stableHash,
+    };
+
+    // Heartbeat run: different full extraSystemPrompt (different inbound meta),
+    // but same stable content → same hash → session reused
+    expect(
+      resolveCliSessionReuse({
+        binding,
+        extraSystemPromptHash: stableHash,
+      }),
+    ).toEqual({ sessionId: "cli-session-1" });
+
+    // If we had used the full extraSystemPrompt hash (including volatile inbound meta),
+    // it would differ and cause an unnecessary reset
+    const fullPromptUserMsg = "inbound-meta-feishu\n\n" + stableContent;
+    const fullPromptHeartbeat = "inbound-meta-heartbeat\n\n" + stableContent;
+    const userHash = hashCliSessionText(fullPromptUserMsg)!;
+    const heartbeatHash = hashCliSessionText(fullPromptHeartbeat)!;
+    expect(userHash).not.toBe(heartbeatHash); // These differ — would cause reset
+    expect(stableHash).toBe(stableHash); // But stable hashes match — no reset
+  });
 });

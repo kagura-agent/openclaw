@@ -875,6 +875,8 @@ export async function runAgentTurnWithFallback(params: {
                   timeoutMs: params.followupRun.run.timeoutMs,
                   runId,
                   extraSystemPrompt: params.followupRun.run.extraSystemPrompt,
+                  extraSystemPromptStableContent:
+                    params.followupRun.run.extraSystemPromptStableContent,
                   ownerNumbers: params.followupRun.run.ownerNumbers,
                   cliSessionId: cliSessionBinding?.sessionId,
                   cliSessionBinding,
@@ -988,6 +990,8 @@ export async function runAgentTurnWithFallback(params: {
                 ...runBaseParams,
                 prompt: params.commandBody,
                 extraSystemPrompt: params.followupRun.run.extraSystemPrompt,
+                extraSystemPromptStableContent:
+                  params.followupRun.run.extraSystemPromptStableContent,
                 toolResultFormat: (() => {
                   const channel = resolveMessageChannel(
                     params.sessionCtx.Surface,

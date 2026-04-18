@@ -23,6 +23,14 @@ export type RunCliAgentParams = {
   timeoutMs: number;
   runId: string;
   extraSystemPrompt?: string;
+  /**
+   * Stable subset of extraSystemPrompt used only for session-reuse hashing.
+   * Excludes volatile per-message metadata (inbound channel context) that
+   * changes between heartbeat and user-message triggers without representing
+   * a meaningful system-prompt change.  When provided, the session hash is
+   * derived from this value instead of extraSystemPrompt.
+   */
+  extraSystemPromptStableContent?: string;
   streamParams?: import("../command/types.js").AgentStreamParams;
   ownerNumbers?: string[];
   cliSessionId?: string;

@@ -78,7 +78,12 @@ export async function prepareCliRunContext(
     authProfileId: params.authProfileId,
   });
   const extraSystemPrompt = params.extraSystemPrompt?.trim() ?? "";
-  const extraSystemPromptHash = hashCliSessionText(extraSystemPrompt);
+  // Use stable content for hashing when available — excludes volatile per-message
+  // metadata (inbound channel context) that differs between heartbeat and user
+  // message triggers without representing a meaningful prompt change (#68471).
+  const extraSystemPromptHashSource =
+    params.extraSystemPromptStableContent?.trim() ?? extraSystemPrompt;
+  const extraSystemPromptHash = hashCliSessionText(extraSystemPromptHashSource);
   const modelId = (params.model ?? "default").trim() || "default";
   const normalizedModel = normalizeCliModel(modelId, backendResolved.config);
   const modelDisplay = `${params.provider}/${modelId}`;

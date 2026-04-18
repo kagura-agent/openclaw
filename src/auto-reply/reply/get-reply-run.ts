@@ -291,17 +291,27 @@ export async function runPreparedReply(
     isNewSession ? sessionCtx : { ...sessionCtx, ThreadStarterBody: undefined },
     { includeFormattingHints: !useFastReplyRuntime },
   );
+  const execOverrideHint = buildExecOverridePromptHint({
+    execOverrides,
+    elevatedLevel: resolvedElevatedLevel,
+    fullAccessAvailable: fullAccessState.available,
+    fullAccessBlockedReason: fullAccessState.blockedReason,
+  });
   const extraSystemPromptParts = [
     inboundMetaPrompt,
     groupChatContext,
     groupIntro,
     groupSystemPrompt,
-    buildExecOverridePromptHint({
-      execOverrides,
-      elevatedLevel: resolvedElevatedLevel,
-      fullAccessAvailable: fullAccessState.available,
-      fullAccessBlockedReason: fullAccessState.blockedReason,
-    }),
+    execOverrideHint,
+  ].filter(Boolean);
+  // Stable subset for session-reuse hashing: excludes inboundMetaPrompt which
+  // contains per-message volatile metadata (channel, surface, account_id) that
+  // differs between heartbeat and user-message triggers (#68471).
+  const extraSystemPromptStableParts = [
+    groupChatContext,
+    groupIntro,
+    groupSystemPrompt,
+    execOverrideHint,
   ].filter(Boolean);
   const baseBody = sessionCtx.BodyStripped ?? sessionCtx.Body ?? "";
   // Use CommandBody/RawBody for bare reset detection (clean message without structural context).
@@ -708,6 +718,7 @@ export async function runPreparedReply(
       ownerNumbers: command.ownerList.length > 0 ? command.ownerList : undefined,
       inputProvenance: ctx.InputProvenance ?? sessionCtx.InputProvenance,
       extraSystemPrompt: extraSystemPromptParts.join("\n\n") || undefined,
+      extraSystemPromptStableContent: extraSystemPromptStableParts.join("\n\n") || undefined,
       skipProviderRuntimeHints: useFastReplyRuntime,
       ...(!useFastReplyRuntime &&
       isReasoningTagProvider(provider, {
