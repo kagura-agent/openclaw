@@ -127,8 +127,6 @@ describe("validateWakeParams", () => {
   });
 
   it("accepts unknown properties for forward compatibility", () => {
-    // External tools like Paperclip may add extra properties to wake payloads.
-    // The schema must not reject them (#68347).
     expect(
       validateWakeParams({
         mode: "now",
