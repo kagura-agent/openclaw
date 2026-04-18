@@ -1679,8 +1679,10 @@ export function createConfigIO(overrides: ConfigIoDeps = {}) {
         // Windows doesn't reliably support atomic replace via rename when dest exists.
         if (code === "EPERM" || code === "EEXIST") {
           await deps.fs.promises.copyFile(tmp, configPath);
-          await deps.fs.promises.chmod(configPath, 0o600).catch(() => {
-            // best-effort
+          await deps.fs.promises.chmod(configPath, 0o600).catch((chmodErr) => {
+            deps.logger.warn(
+              `Failed to chmod ${configPath} to 0o600 after config write (copy-fallback) — file may be readable by other users: ${formatErrorMessage(chmodErr)}`,
+            );
           });
           await deps.fs.promises.unlink(tmp).catch(() => {
             // best-effort
@@ -1699,6 +1701,16 @@ export function createConfigIO(overrides: ConfigIoDeps = {}) {
         });
         throw err;
       }
+      // Ensure restrictive permissions after atomic rename. The tmp file is created
+      // with mode 0o600, but the effective mode is subject to the process umask
+      // (e.g. systemd default UMask=0002 is fine, but a permissive umask could
+      // widen it). Belt-and-suspenders chmod ensures openclaw.json — which contains
+      // API keys and security policy — is never group/world-readable. (#68709)
+      await deps.fs.promises.chmod(configPath, 0o600).catch((chmodErr) => {
+        deps.logger.warn(
+          `Failed to chmod ${configPath} to 0o600 after config write — file may be readable by other users: ${formatErrorMessage(chmodErr)}`,
+        );
+      });
       logConfigOverwrite();
       logConfigWriteAnomalies();
       await appendWriteAudit(

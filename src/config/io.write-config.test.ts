@@ -102,6 +102,36 @@ describe("config io write", () => {
     },
   );
 
+  it.runIf(process.platform !== "win32")(
+    "ensures config file is mode 0o600 after write (#68709)",
+    async () => {
+      await withSuiteHome(async (home) => {
+        const stateDir = path.join(home, ".openclaw");
+        await fs.mkdir(stateDir, { recursive: true });
+
+        const io = createConfigIO({
+          env: {} as NodeJS.ProcessEnv,
+          homedir: () => home,
+          logger: silentLogger,
+        });
+
+        // First write (creates file)
+        await io.writeConfigFile({ gateway: { mode: "local" } });
+        const configPath = path.join(stateDir, "openclaw.json");
+        const stat1 = await fs.stat(configPath);
+        expect(stat1.mode & 0o777).toBe(0o600);
+
+        // Widen permissions to simulate a permissive umask environment
+        await fs.chmod(configPath, 0o664);
+
+        // Second write (overwrites existing file via atomic rename)
+        await io.writeConfigFile({ gateway: { mode: "local", port: 9999 } } as any);
+        const stat2 = await fs.stat(configPath);
+        expect(stat2.mode & 0o777).toBe(0o600);
+      });
+    },
+  );
+
   it("keeps writes inside an OPENCLAW_STATE_DIR override even when the real home config exists", async () => {
     await withSuiteHome(async (home) => {
       const liveConfigPath = path.join(home, ".openclaw", "openclaw.json");
