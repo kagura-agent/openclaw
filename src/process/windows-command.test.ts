@@ -32,6 +32,18 @@ describe("resolveWindowsCommandShim", () => {
     ).toBe("corepack.cmd");
   });
 
+  it("appends .cmd for CLI tools with .cmd shims on Windows", () => {
+    for (const cmd of ["claude", "codex", "hermes"]) {
+      expect(
+        resolveWindowsCommandShim({
+          command: cmd,
+          cmdCommands: ["npm", "pnpm", "yarn", "npx", "claude", "codex", "hermes"],
+          platform: "win32",
+        }),
+      ).toBe(`${cmd}.cmd`);
+    }
+  });
+
   it("keeps explicit extensions on Windows", () => {
     expect(
       resolveWindowsCommandShim({
