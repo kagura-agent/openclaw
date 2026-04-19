@@ -8,6 +8,7 @@ import { afterEach, describe, expect, test } from "vitest";
 import {
   captureCompactionCheckpointSnapshot,
   cleanupCompactionCheckpointSnapshot,
+  discoverCheckpointFilesFromDisk,
 } from "./session-compaction-checkpoints.js";
 
 const tempDirs: string[] = [];
@@ -80,5 +81,46 @@ describe("session-compaction-checkpoints", () => {
 
     expect(fsSync.existsSync(snapshot!.sessionFile)).toBe(false);
     expect(fsSync.existsSync(sessionFile!)).toBe(true);
+  });
+
+  test("discoverCheckpointFilesFromDisk finds checkpoint files by naming convention", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-checkpoint-discover-"));
+    tempDirs.push(dir);
+
+    const sessionFile = path.join(dir, "abc123.jsonl");
+    await fs.writeFile(sessionFile, "{}");
+
+    // Create checkpoint files matching the naming convention
+    const cp1 = path.join(dir, "abc123.checkpoint.uuid-1111.jsonl");
+    const cp2 = path.join(dir, "abc123.checkpoint.uuid-2222.jsonl");
+    const unrelated = path.join(dir, "other-session.checkpoint.uuid-3333.jsonl");
+    await fs.writeFile(cp1, "{}");
+    // Small delay so mtimes differ
+    await new Promise((r) => setTimeout(r, 50));
+    await fs.writeFile(cp2, "{}");
+    await fs.writeFile(unrelated, "{}");
+
+    const discovered = discoverCheckpointFilesFromDisk(sessionFile, "agent:main:main", "sid-1");
+
+    expect(discovered).toHaveLength(2);
+    expect(discovered.map((c) => c.checkpointId).toSorted()).toEqual(["uuid-1111", "uuid-2222"]);
+    expect(discovered[0].sessionKey).toBe("agent:main:main");
+    expect(discovered[0].sessionId).toBe("sid-1");
+    expect(discovered[0].preCompaction.sessionFile).toBeTruthy();
+    // Should be sorted newest first
+    expect(discovered[0].createdAt).toBeGreaterThanOrEqual(discovered[1].createdAt);
+  });
+
+  test("discoverCheckpointFilesFromDisk returns empty for missing sessionFile", () => {
+    expect(discoverCheckpointFilesFromDisk(undefined, "k", "s")).toEqual([]);
+    expect(discoverCheckpointFilesFromDisk("", "k", "s")).toEqual([]);
+  });
+
+  test("discoverCheckpointFilesFromDisk returns empty when no checkpoint files exist", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-checkpoint-empty-"));
+    tempDirs.push(dir);
+    const sessionFile = path.join(dir, "session.jsonl");
+    await fs.writeFile(sessionFile, "{}");
+    expect(discoverCheckpointFilesFromDisk(sessionFile, "k", "s")).toEqual([]);
   });
 });

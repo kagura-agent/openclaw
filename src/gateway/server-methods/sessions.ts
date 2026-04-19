@@ -60,6 +60,7 @@ import {
   validateSessionsSendParams,
 } from "../protocol/index.js";
 import {
+  discoverCheckpointFilesFromDisk,
   getSessionCompactionCheckpoint,
   listSessionCompactionCheckpoints,
 } from "../session-compaction-checkpoints.js";
@@ -729,12 +730,20 @@ export const sessionsHandlers: GatewayRequestHandlers = {
       return;
     }
     const { entry, canonicalKey } = loadSessionEntry(key);
+    let checkpoints = listSessionCompactionCheckpoints(entry);
+    if (checkpoints.length === 0 && entry?.sessionFile) {
+      checkpoints = discoverCheckpointFilesFromDisk(
+        entry.sessionFile,
+        canonicalKey,
+        entry.sessionId,
+      );
+    }
     respond(
       true,
       {
         ok: true,
         key: canonicalKey,
-        checkpoints: listSessionCompactionCheckpoints(entry),
+        checkpoints,
       },
       undefined,
     );
@@ -761,7 +770,15 @@ export const sessionsHandlers: GatewayRequestHandlers = {
       return;
     }
     const { entry, canonicalKey } = loadSessionEntry(key);
-    const checkpoint = getSessionCompactionCheckpoint({ entry, checkpointId });
+    let checkpoint = getSessionCompactionCheckpoint({ entry, checkpointId });
+    if (!checkpoint && entry?.sessionFile) {
+      const discovered = discoverCheckpointFilesFromDisk(
+        entry.sessionFile,
+        canonicalKey,
+        entry.sessionId,
+      );
+      checkpoint = discovered.find((c) => c.checkpointId === checkpointId);
+    }
     if (!checkpoint) {
       respond(
         false,
@@ -992,7 +1009,15 @@ export const sessionsHandlers: GatewayRequestHandlers = {
       );
       return;
     }
-    const checkpoint = getSessionCompactionCheckpoint({ entry, checkpointId });
+    let checkpoint = getSessionCompactionCheckpoint({ entry, checkpointId });
+    if (!checkpoint?.preCompaction.sessionFile && entry.sessionFile) {
+      const discovered = discoverCheckpointFilesFromDisk(
+        entry.sessionFile,
+        canonicalKey,
+        entry.sessionId,
+      );
+      checkpoint = discovered.find((c) => c.checkpointId === checkpointId);
+    }
     if (!checkpoint?.preCompaction.sessionFile) {
       respond(
         false,
@@ -1103,7 +1128,15 @@ export const sessionsHandlers: GatewayRequestHandlers = {
       );
       return;
     }
-    const checkpoint = getSessionCompactionCheckpoint({ entry, checkpointId });
+    let checkpoint = getSessionCompactionCheckpoint({ entry, checkpointId });
+    if (!checkpoint?.preCompaction.sessionFile && entry.sessionFile) {
+      const discovered = discoverCheckpointFilesFromDisk(
+        entry.sessionFile,
+        canonicalKey,
+        entry.sessionId,
+      );
+      checkpoint = discovered.find((c) => c.checkpointId === checkpointId);
+    }
     if (!checkpoint?.preCompaction.sessionFile) {
       respond(
         false,

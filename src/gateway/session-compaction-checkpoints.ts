@@ -193,6 +193,66 @@ export function listSessionCompactionCheckpoints(
   return sessionStoreCheckpoints(entry).toSorted((a, b) => b.createdAt - a.createdAt);
 }
 
+/**
+ * Discover checkpoint files on disk for a session whose compactionCheckpoints
+ * array is empty/missing in the store.  Returns synthetic checkpoint entries
+ * built from filename parsing and file-system metadata so the Web UI can
+ * display them.
+ */
+export function discoverCheckpointFilesFromDisk(
+  sessionFile: string | undefined,
+  sessionKey: string,
+  sessionId: string,
+): SessionCompactionCheckpoint[] {
+  if (!sessionFile?.trim()) {
+    return [];
+  }
+  const parsed = path.parse(sessionFile);
+  const prefix = `${parsed.name}.checkpoint.`;
+  const ext = parsed.ext || ".jsonl";
+  let dirEntries: string[];
+  try {
+    dirEntries = fsSync.readdirSync(parsed.dir);
+  } catch {
+    return [];
+  }
+  const results: SessionCompactionCheckpoint[] = [];
+  for (const entry of dirEntries) {
+    if (!entry.startsWith(prefix) || !entry.endsWith(ext)) {
+      continue;
+    }
+    // Extract the checkpoint UUID from the filename
+    const withoutPrefix = entry.slice(prefix.length);
+    const checkpointId = withoutPrefix.slice(0, withoutPrefix.length - ext.length);
+    if (!checkpointId) {
+      continue;
+    }
+    const filePath = path.join(parsed.dir, entry);
+    let createdAt = Date.now();
+    try {
+      const stat = fsSync.statSync(filePath);
+      createdAt = stat.mtimeMs;
+    } catch {
+      // Use current time as fallback
+    }
+    results.push({
+      checkpointId,
+      sessionKey,
+      sessionId,
+      createdAt,
+      reason: "auto-threshold",
+      preCompaction: {
+        sessionId,
+        sessionFile: filePath,
+      },
+      postCompaction: {
+        sessionId,
+      },
+    });
+  }
+  return results.toSorted((a, b) => b.createdAt - a.createdAt);
+}
+
 export function getSessionCompactionCheckpoint(params: {
   entry: Pick<SessionEntry, "compactionCheckpoints"> | undefined;
   checkpointId: string;
