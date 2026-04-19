@@ -3560,4 +3560,44 @@ describe("dispatchTelegramMessage draft streaming", () => {
     expect(generateTopicLabel).not.toHaveBeenCalled();
     expect(bot.api.editForumTopic).not.toHaveBeenCalled();
   });
+
+  it("passes humanDelay config to dispatcherOptions", async () => {
+    setupDraftStreams();
+    const context = createContext();
+    const humanDelayCfg = {
+      agents: {
+        defaults: {
+          humanDelay: { mode: "natural" as const },
+        },
+      },
+    };
+
+    await dispatchWithContext({
+      context,
+      cfg: humanDelayCfg as Parameters<typeof dispatchTelegramMessage>[0]["cfg"],
+    });
+
+    expect(dispatchReplyWithBufferedBlockDispatcher).toHaveBeenCalledWith(
+      expect.objectContaining({
+        dispatcherOptions: expect.objectContaining({
+          humanDelay: expect.objectContaining({ mode: "natural" }),
+        }),
+      }),
+    );
+  });
+
+  it("omits humanDelay when config has no humanDelay section", async () => {
+    setupDraftStreams();
+    const context = createContext();
+
+    await dispatchWithContext({ context, cfg: {} });
+
+    expect(dispatchReplyWithBufferedBlockDispatcher).toHaveBeenCalledWith(
+      expect.objectContaining({
+        dispatcherOptions: expect.objectContaining({
+          humanDelay: undefined,
+        }),
+      }),
+    );
+  });
 });
