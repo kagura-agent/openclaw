@@ -82,6 +82,13 @@ type TimedCronRunOutcome = CronRunOutcome &
     deliveryAttempted?: boolean;
     startedAt: number;
     endedAt: number;
+    /**
+     * Snapshot of the job's delivery config captured before execution.
+     * Restored after execution to guard against in-flight mutations that
+     * could overwrite the user-configured value (e.g. channel reverting
+     * from "telegram" to "last"). See #68760.
+     */
+    deliverySnapshot?: CronJob["delivery"];
   };
 
 type StartupCatchupCandidate = {
@@ -735,6 +742,14 @@ function applyOutcomeToStoredJob(state: CronServiceState, result: TimedCronRunOu
     return;
   }
 
+  // Restore the delivery config snapshot captured before execution.
+  // This guards against in-flight mutations that could overwrite
+  // user-configured values (e.g. channel reverting from "telegram"
+  // to "last"). See #68760.
+  if (result.deliverySnapshot !== undefined) {
+    job.delivery = result.deliverySnapshot;
+  }
+
   const shouldDelete = applyJobResult(state, job, {
     status: result.status,
     error: result.error,
@@ -877,6 +892,9 @@ export async function onTimer(state: CronServiceState) {
       job: CronJob;
     }): Promise<TimedCronRunOutcome> => {
       const { id, job } = params;
+      // Snapshot immutable delivery config before execution so it can be
+      // restored after reload, guarding against in-flight mutations (#68760).
+      const deliverySnapshot = job.delivery ? structuredClone(job.delivery) : undefined;
       const startedAt = state.deps.nowMs();
       job.state.runningAtMs = startedAt;
       markCronJobActive(job.id);
@@ -893,6 +911,7 @@ export async function onTimer(state: CronServiceState) {
           ...result,
           startedAt,
           endedAt: state.deps.nowMs(),
+          deliverySnapshot,
         };
       } catch (err) {
         const errorText = normalizeCronRunErrorText(err);
@@ -908,6 +927,7 @@ export async function onTimer(state: CronServiceState) {
           error: errorText,
           startedAt,
           endedAt: state.deps.nowMs(),
+          deliverySnapshot,
         };
       }
     };
@@ -1219,6 +1239,9 @@ async function runStartupCatchupCandidate(
     job: candidate.job,
     runAtMs: startedAt,
   });
+  const deliverySnapshot = candidate.job.delivery
+    ? structuredClone(candidate.job.delivery)
+    : undefined;
   try {
     const result = await executeJobCoreWithTimeout(state, candidate.job);
     return {
@@ -1236,6 +1259,7 @@ async function runStartupCatchupCandidate(
       usage: result.usage,
       startedAt,
       endedAt: state.deps.nowMs(),
+      deliverySnapshot,
     };
   } catch (err) {
     return {
@@ -1246,6 +1270,7 @@ async function runStartupCatchupCandidate(
       error: normalizeCronRunErrorText(err),
       startedAt,
       endedAt: state.deps.nowMs(),
+      deliverySnapshot,
     };
   }
 }
