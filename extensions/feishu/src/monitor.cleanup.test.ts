@@ -73,10 +73,12 @@ describe("feishu websocket cleanup", () => {
     abortController.abort();
     await monitorPromise;
 
-    expect(wsClient.close).toHaveBeenCalledTimes(1);
-    expect(wsClients.has(accountId)).toBe(false);
-    expect(botOpenIds.has(accountId)).toBe(false);
-    expect(botNames.has(accountId)).toBe(false);
+    await vi.waitFor(() => {
+      expect(wsClient.close).toHaveBeenCalledTimes(1);
+      expect(wsClients.has(accountId)).toBe(false);
+      expect(botOpenIds.has(accountId)).toBe(false);
+      expect(botNames.has(accountId)).toBe(false);
+    });
   });
 
   it("closes targeted websocket clients during stop cleanup", () => {
