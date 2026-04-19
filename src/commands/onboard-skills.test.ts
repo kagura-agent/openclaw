@@ -186,4 +186,39 @@ describe("setupSkills", () => {
     const brewNote = notes.find((n) => n.title === "Homebrew recommended");
     expect(brewNote).toBeDefined();
   });
+
+  it("shows native package manager fallback note on Linux when apt-get is available", async () => {
+    if (process.platform === "win32") {
+      return;
+    }
+
+    const originalPlatform = process.platform;
+    Object.defineProperty(process, "platform", { value: "linux", writable: true });
+
+    try {
+      mockMissingBrewStatus([
+        createBundledSkill({
+          name: "video-frames",
+          description: "ffmpeg",
+          bins: ["ffmpeg"],
+          installLabel: "Install ffmpeg (brew)",
+        }),
+      ]);
+
+      // apt-get is available, brew is not
+      mocks.detectBinary.mockImplementation(async (bin: string) => bin === "apt-get");
+
+      const { prompter, notes } = createPrompter({ multiselect: ["video-frames"] });
+      await setupSkills({} as OpenClawConfig, "/tmp/ws", runtime, prompter);
+
+      const fallbackNote = notes.find((n) => n.title === "Native package manager fallback");
+      expect(fallbackNote).toBeDefined();
+      expect(fallbackNote!.message).toContain("native package manager was detected");
+
+      const brewNote = notes.find((n) => n.title === "Homebrew recommended");
+      expect(brewNote).toBeUndefined();
+    } finally {
+      Object.defineProperty(process, "platform", { value: originalPlatform, writable: true });
+    }
+  });
 });

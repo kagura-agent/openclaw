@@ -108,12 +108,28 @@ export async function setupSkills(
       .map((name) => installable.find((s) => s.name === name))
       .filter((item): item is (typeof installable)[number] => Boolean(item));
 
-    const needsBrewPrompt =
-      process.platform !== "win32" &&
-      selectedSkills.some((skill) => skill.install.some((option) => option.kind === "brew")) &&
-      !(await detectBinary("brew"));
+    const hasBrewSkills = selectedSkills.some((skill) =>
+      skill.install.some((option) => option.kind === "brew"),
+    );
+    const brewMissing = hasBrewSkills && !(await detectBinary("brew"));
+    const hasNativePackageManager =
+      process.platform === "linux" &&
+      ((await detectBinary("apt-get")) ||
+        (await detectBinary("apk")) ||
+        (await detectBinary("dnf")) ||
+        (await detectBinary("yum")));
 
-    if (needsBrewPrompt) {
+    const needsBrewPrompt = process.platform !== "win32" && brewMissing && !hasNativePackageManager;
+
+    if (brewMissing && hasNativePackageManager) {
+      await prompter.note(
+        [
+          "Homebrew is not installed, but a native package manager was detected.",
+          "Brew-based skill dependencies will be installed via your system package manager.",
+        ].join("\n"),
+        "Native package manager fallback",
+      );
+    } else if (needsBrewPrompt) {
       await prompter.note(
         [
           "Many skill dependencies are shipped via Homebrew.",
