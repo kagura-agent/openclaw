@@ -395,6 +395,10 @@ export function createEventHandlers(context: EventHandlerContext) {
       return;
     }
     if (evt.stream === "tool") {
+      // Rearm watchdog on tool events so long tool calls don't trigger a false idle.
+      if (isActiveRun) {
+        armStreamingWatchdog(evt.runId);
+      }
       const verbose = state.sessionInfo.verboseLevel ?? "off";
       const allowToolEvents = verbose !== "off";
       const allowToolOutput = verbose === "full";
@@ -476,5 +480,5 @@ export function createEventHandlers(context: EventHandlerContext) {
     clearStreamingWatchdog();
   };
 
-  return { handleChatEvent, handleAgentEvent, handleBtwEvent, dispose };
+  return { handleChatEvent, handleAgentEvent, handleBtwEvent, clearStreamingWatchdog, dispose };
 }

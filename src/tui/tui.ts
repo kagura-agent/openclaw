@@ -730,22 +730,23 @@ export async function runTui(opts: TuiOptions) {
     abortActive,
   } = sessionActions;
 
-  const { handleChatEvent, handleAgentEvent, handleBtwEvent } = createEventHandlers({
-    chatLog,
-    btw,
-    tui,
-    state,
-    setActivityStatus,
-    refreshSessionInfo,
-    loadHistory,
-    noteLocalRunId,
-    isLocalRunId,
-    forgetLocalRunId,
-    clearLocalRunIds,
-    isLocalBtwRunId,
-    forgetLocalBtwRunId,
-    clearLocalBtwRunIds,
-  });
+  const { handleChatEvent, handleAgentEvent, handleBtwEvent, clearStreamingWatchdog } =
+    createEventHandlers({
+      chatLog,
+      btw,
+      tui,
+      state,
+      setActivityStatus,
+      refreshSessionInfo,
+      loadHistory,
+      noteLocalRunId,
+      isLocalRunId,
+      forgetLocalRunId,
+      clearLocalRunIds,
+      isLocalBtwRunId,
+      forgetLocalBtwRunId,
+      clearLocalBtwRunIds,
+    });
 
   const requestExit = () => {
     if (exitRequested) {
@@ -888,6 +889,12 @@ export async function runTui(opts: TuiOptions) {
     pairingHintShown = false;
     const reconnected = wasDisconnected;
     wasDisconnected = false;
+    // On reconnect, clear stale run state so we don't stay stuck in 'streaming'.
+    if (reconnected) {
+      state.activeChatRunId = null;
+      clearStreamingWatchdog();
+      setActivityStatus("idle");
+    }
     setConnectionStatus("connected");
     void (async () => {
       await refreshAgents();
