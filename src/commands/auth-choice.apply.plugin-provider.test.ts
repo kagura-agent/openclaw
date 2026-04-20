@@ -390,6 +390,8 @@ describe("applyAuthChoiceLoadedPluginProvider", () => {
       fallbacks: ["claude-cli/claude-opus-4-6", "openai/gpt-5.2"],
     });
     expect(result.config.agents?.defaults?.models).toEqual({
+      "anthropic/claude-sonnet-4-6": { alias: "Sonnet" },
+      "anthropic/claude-opus-4-6": { alias: "Opus" },
       "claude-cli/claude-sonnet-4-6": { alias: "Sonnet" },
       "claude-cli/claude-opus-4-6": { alias: "Opus" },
       "openai/gpt-5.2": {},
