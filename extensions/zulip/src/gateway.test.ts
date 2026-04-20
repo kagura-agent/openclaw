@@ -151,7 +151,7 @@ describe("startZulipGateway", () => {
 
     const handle = startZulipGateway(
       TEST_CONFIG,
-      { onMessage: (e) => messages.push(e) },
+      { onMessage: (e) => { messages.push(e); } },
       { ownUserId: 42, abortSignal: ac.signal },
     );
 
