@@ -183,11 +183,16 @@ export function resolveSessionIdToSend(params: {
   return { sessionId: crypto.randomUUID(), isNew: true };
 }
 
-export function resolvePromptInput(params: { backend: CliBackendConfig; prompt: string }): {
+export function resolvePromptInput(params: {
+  backend: CliBackendConfig;
+  prompt: string;
+  backendId?: string;
+}): {
   argsPrompt?: string;
   stdin?: string;
 } {
-  const inputMode = params.backend.input ?? "arg";
+  const defaultMode = isClaudeCliProvider(params.backendId ?? "") ? "stdin" : "arg";
+  const inputMode = params.backend.input ?? defaultMode;
   if (inputMode === "stdin") {
     return { stdin: params.prompt };
   }

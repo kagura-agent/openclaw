@@ -225,6 +225,7 @@ export async function executePreparedCliRun(
   const { argsPrompt, stdin } = resolvePromptInput({
     backend,
     prompt,
+    backendId: context.backendResolved.id,
   });
   const stdinPayload = stdin ?? "";
   const baseArgs = useResume ? (backend.resumeArgs ?? backend.args ?? []) : (backend.args ?? []);
