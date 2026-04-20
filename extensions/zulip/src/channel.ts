@@ -1,9 +1,15 @@
 import { createChatChannelPlugin } from "openclaw/plugin-sdk/channel-core";
 import type { ChannelPlugin } from "openclaw/plugin-sdk/channel-core";
 import type { OpenClawConfig } from "openclaw/plugin-sdk/config-runtime";
+import { ZulipClient } from "./client.js";
 import { ZulipChannelConfigSchema } from "./config-schema.js";
+import { startZulipGateway } from "./gateway.js";
+import { normalizeZulipEvent, buildInboundTarget } from "./inbound.js";
+import { normalizeZulipMessagingTarget } from "./normalize.js";
+import { zulipOutboundBaseAdapter } from "./outbound-base.js";
 import { secretTargetRegistryEntries, collectRuntimeConfigAssignments } from "./secret-contract.js";
-import type { ZulipProbe } from "./types.js";
+import { sendMessageZulip } from "./send.js";
+import type { CoreConfig, ZulipProbe } from "./types.js";
 
 type ResolvedZulipAccount = {
   accountId?: string | null;
@@ -70,7 +76,124 @@ export const zulipPlugin: ChannelPlugin<ResolvedZulipAccount, ZulipProbe> = crea
         secretTargetRegistryEntries,
         collectRuntimeConfigAssignments,
       },
+      messaging: {
+        normalizeTarget: normalizeZulipMessagingTarget,
+      },
+      gateway: {
+        startAccount: async (ctx) => {
+          const cfg = ctx.cfg as CoreConfig;
+          const zulipCfg = cfg.channels?.zulip;
+          if (!zulipCfg?.realm || !zulipCfg?.email || !zulipCfg?.apiKey) {
+            throw new Error("Zulip realm, email, and apiKey are required");
+          }
+          ctx.log?.info?.(`zulip: starting gateway for ${zulipCfg.realm}`);
+
+          // Get own user ID for self-message filtering
+          const client = new ZulipClient({
+            realm: zulipCfg.realm,
+            email: zulipCfg.email,
+            apiKey: zulipCfg.apiKey,
+          });
+          const ownUser = await client.getOwnUser();
+          const ownUserId = ownUser.user_id;
+          ctx.log?.info?.(`zulip: bot user_id=${ownUserId} (${ownUser.email})`);
+
+          const accountId = ctx.accountId ?? "default";
+          const handle = startZulipGateway(
+            {
+              realm: zulipCfg.realm,
+              email: zulipCfg.email,
+              apiKey: zulipCfg.apiKey,
+            },
+            {
+              onMessage: async (event) => {
+                const msg = normalizeZulipEvent(event, ownUserId);
+                const target = buildInboundTarget(msg, accountId);
+                ctx.log?.info?.(`zulip: inbound from ${msg.senderEmail} → ${target}`);
+
+                // Dispatch to AI via channelRuntime if available.
+                // Uses finalizeInboundContext → dispatchReplyWithBufferedBlockDispatcher
+                // pattern (see qqbot/discord adapters for reference).
+                if (ctx.channelRuntime) {
+                  const ctxPayload = ctx.channelRuntime.reply.finalizeInboundContext({
+                    Body: msg.text,
+                    BodyForAgent: msg.text,
+                    RawBody: msg.text,
+                    CommandBody: msg.text,
+                    From: msg.senderEmail,
+                    To: `zulip:${accountId}`,
+                    SessionKey: target,
+                    AccountId: accountId,
+                    ChatType: msg.isGroup ? "group" : "direct",
+                    SenderId: String(msg.senderId),
+                    SenderName: msg.senderName,
+                    Provider: "zulip",
+                    Surface: "zulip",
+                    MessageSid: String(msg.messageId),
+                    Timestamp: msg.timestamp * 1000,
+                    OriginatingChannel: "zulip",
+                    OriginatingTo: target,
+                    CommandAuthorized: false,
+                  });
+
+                  await ctx.channelRuntime.reply.dispatchReplyWithBufferedBlockDispatcher({
+                    ctx: ctxPayload,
+                    cfg: ctx.cfg,
+                    dispatcherOptions: {
+                      deliver: async (payload: { text?: string }) => {
+                        const text = payload.text?.trim();
+                        if (text) {
+                          await sendMessageZulip(target, text, { accountId });
+                        }
+                      },
+                    },
+                  });
+                }
+              },
+              onError: (err) => {
+                ctx.log?.info?.(`zulip: gateway error: ${String(err)}`);
+              },
+              onConnected: (info) => {
+                ctx.log?.info?.(`zulip: connected (queue=${info.queueId})`);
+              },
+              log: (msg) => ctx.log?.info?.(msg),
+            },
+            { abortSignal: ctx.abortSignal },
+          );
+          return {
+            stop: () => handle.stop(),
+          };
+        },
+      },
     },
-    // TODO: gateway, inbound, outbound adapters
+    outbound: {
+      base: zulipOutboundBaseAdapter,
+      attachedResults: {
+        channel: "zulip",
+        sendText: async ({ to, text, accountId, replyToId }) => {
+          const result = await sendMessageZulip(to, text, {
+            accountId: accountId ?? undefined,
+            replyTo: replyToId ?? undefined,
+          });
+          return { messageId: String(result.messageId), target: result.target };
+        },
+        sendMedia: async ({ to, text, mediaUrl, accountId, replyToId }) => {
+          if (mediaUrl) {
+            // For URLs we don't have blob data, send as a text message with link
+            const message = text ? `${text}\n${mediaUrl}` : mediaUrl;
+            const r1 = await sendMessageZulip(to, message, {
+              accountId: accountId ?? undefined,
+              replyTo: replyToId ?? undefined,
+            });
+            return { messageId: String(r1.messageId), target: r1.target };
+          }
+          const r2 = await sendMessageZulip(to, text, {
+            accountId: accountId ?? undefined,
+            replyTo: replyToId ?? undefined,
+          });
+          return { messageId: String(r2.messageId), target: r2.target };
+        },
+      },
+    },
   },
 );
