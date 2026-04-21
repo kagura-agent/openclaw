@@ -127,7 +127,17 @@ export interface HeartbeatEvent {
   id: number;
 }
 
-export type ZulipEvent = MessageEvent | HeartbeatEvent;
+export interface UpdateMessageEvent {
+  type: "update_message";
+  id: number;
+  message_id: number;
+  stream_id?: number;
+  orig_subject?: string;
+  subject?: string;
+  propagate_mode?: "change_one" | "change_later" | "change_all";
+}
+
+export type ZulipEvent = MessageEvent | HeartbeatEvent | UpdateMessageEvent;
 
 export interface EventsResponse {
   events: ZulipEvent[];

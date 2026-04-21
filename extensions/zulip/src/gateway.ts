@@ -13,6 +13,7 @@ import type { ZulipClientConfig, MessageEvent } from "./types.js";
 
 export interface GatewayCallbacks {
   onMessage: (event: MessageEvent) => void | Promise<void>;
+  onTopicRename?: (streamId: number, oldTopic: string, newTopic: string) => void | Promise<void>;
   onError?: (error: unknown) => void;
   onConnected?: (info: { queueId: string; zulipVersion: string }) => void;
   onReconnect?: () => void;
@@ -35,15 +36,17 @@ export function startZulipGateway(
   opts?: { ownUserId?: number; abortSignal?: AbortSignal },
 ): GatewayHandle {
   const client = new ZulipClient(config);
-  let running = true;
+  const state = { running: true };
   let currentQueueId: string | undefined;
 
   const loop = (async () => {
-    while (running && !opts?.abortSignal?.aborted) {
+    let consecutiveErrors = 0;
+
+    while (state.running && !opts?.abortSignal?.aborted) {
       try {
         // Register event queue
         const reg = await client.registerQueue({
-          event_types: ["message", "heartbeat"],
+          event_types: ["message", "heartbeat", "update_message"],
           apply_markdown: true,
           all_public_streams: false,
         });
@@ -55,8 +58,11 @@ export function startZulipGateway(
           zulipVersion: reg.zulip_version,
         });
 
+        // Reset backoff on successful connection
+        consecutiveErrors = 0;
+
         // Poll loop
-        while (running && !opts?.abortSignal?.aborted) {
+        while (state.running && !opts?.abortSignal?.aborted) {
           const events = await client.getEvents(reg.queue_id, lastEventId);
 
           for (const event of events.events) {
@@ -77,30 +83,66 @@ export function startZulipGateway(
               }
             }
             // heartbeat events just advance lastEventId
+
+            if (event.type === "update_message") {
+              const ume = event;
+              if (
+                ume.orig_subject != null &&
+                ume.subject != null &&
+                ume.orig_subject !== ume.subject &&
+                ume.stream_id != null
+              ) {
+                try {
+                  await callbacks.onTopicRename?.(ume.stream_id, ume.orig_subject, ume.subject);
+                } catch (err) {
+                  callbacks.onError?.(err);
+                }
+              }
+            }
           }
         }
       } catch (err) {
-        if (!running || opts?.abortSignal?.aborted) {
+        if (!state.running || opts?.abortSignal?.aborted) {
           break;
+        }
+
+        // Best-effort cleanup of stale queue before re-registering
+        if (currentQueueId) {
+          try {
+            await client.deleteQueue(currentQueueId);
+          } catch {
+            // Ignore — queue may already be gone
+          }
+          currentQueueId = undefined;
         }
 
         if (err instanceof ZulipApiRequestError && err.code === "BAD_EVENT_QUEUE_ID") {
           callbacks.log?.("zulip: event queue expired, re-registering...");
           callbacks.onReconnect?.();
-          currentQueueId = undefined;
           continue;
         }
 
+        // Exponential backoff with jitter (cap at 5 minutes)
+        const isRateLimit =
+          err instanceof ZulipApiRequestError && err.message.includes("rate limit");
+        const baseDelay = isRateLimit ? 30_000 : 5_000;
+        const backoffDelay = Math.min(baseDelay * 2 ** consecutiveErrors, 300_000);
+        const jitter = Math.random() * 5_000;
+        const delay = backoffDelay + jitter;
+        consecutiveErrors++;
+
         callbacks.onError?.(err);
-        callbacks.log?.(`zulip: gateway error, retrying in 5s: ${String(err)}`);
-        await new Promise((r) => setTimeout(r, 5000));
+        callbacks.log?.(
+          `zulip: gateway error, retrying in ${Math.round(delay / 1000)}s (attempt ${consecutiveErrors}): ${String(err)}`,
+        );
+        await new Promise((r) => setTimeout(r, delay));
       }
     }
   })();
 
   return {
     async stop() {
-      running = false;
+      state.running = false;
       if (currentQueueId) {
         try {
           await client.deleteQueue(currentQueueId);

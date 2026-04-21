@@ -18,6 +18,7 @@ import { telegramExtensionTestRoots } from "./vitest.extension-telegram-paths.mj
 import { voiceCallExtensionTestRoots } from "./vitest.extension-voice-call-paths.mjs";
 import { whatsAppExtensionTestRoots } from "./vitest.extension-whatsapp-paths.mjs";
 import { zaloExtensionTestRoots } from "./vitest.extension-zalo-paths.mjs";
+import { zulipExtensionTestRoots } from "./vitest.extension-zulip-paths.mjs";
 import { loadPatternListFromEnv } from "./vitest.pattern-file.ts";
 import { createScopedVitestConfig } from "./vitest.scoped-config.ts";
 
@@ -56,6 +57,7 @@ export function createExtensionsVitestConfig(
       ...voiceCallExtensionTestRoots.map((root) => `${root.replace(/^extensions\//u, "")}/**`),
       ...whatsAppExtensionTestRoots.map((root) => `${root.replace(/^extensions\//u, "")}/**`),
       ...zaloExtensionTestRoots.map((root) => `${root.replace(/^extensions\//u, "")}/**`),
+      ...zulipExtensionTestRoots.map((root) => `${root.replace(/^extensions\//u, "")}/**`),
     ],
   });
 }

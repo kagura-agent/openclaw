@@ -1,3 +1,5 @@
+import os from "node:os";
+import path from "node:path";
 import { createChatChannelPlugin } from "openclaw/plugin-sdk/channel-core";
 import type { ChannelPlugin } from "openclaw/plugin-sdk/channel-core";
 import type { OpenClawConfig } from "openclaw/plugin-sdk/config-runtime";
@@ -5,6 +7,12 @@ import { ZulipClient } from "./client.js";
 import { ZulipChannelConfigSchema } from "./config-schema.js";
 import { startZulipGateway } from "./gateway.js";
 import { normalizeZulipEvent, buildInboundTarget } from "./inbound.js";
+import {
+  initDatabase,
+  MetadataStore,
+  handleMetaCommand,
+  syncPrefixToMetadata,
+} from "./metadata/index.js";
 import { normalizeZulipMessagingTarget } from "./normalize.js";
 import { zulipOutboundBaseAdapter } from "./outbound-base.js";
 import { secretTargetRegistryEntries, collectRuntimeConfigAssignments } from "./secret-contract.js";
@@ -98,6 +106,11 @@ export const zulipPlugin: ChannelPlugin<ResolvedZulipAccount, ZulipProbe> = crea
           const ownUserId = ownUser.user_id;
           ctx.log?.info?.(`zulip: bot user_id=${ownUserId} (${ownUser.email})`);
 
+          // Initialize metadata subsystem
+          const dbPath = path.join(os.homedir(), ".openclaw", "data", "zulip-metadata.sqlite");
+          const db = initDatabase(dbPath);
+          const metadataStore = new MetadataStore(db);
+
           const accountId = ctx.accountId ?? "default";
           const handle = startZulipGateway(
             {
@@ -108,14 +121,34 @@ export const zulipPlugin: ChannelPlugin<ResolvedZulipAccount, ZulipProbe> = crea
             {
               onMessage: async (event) => {
                 const msg = normalizeZulipEvent(event, ownUserId);
+
+                // Intercept /meta commands before AI dispatch
+                const stripped = msg.text.replace(/<[^>]*>/g, "").trim();
+                if (stripped.startsWith("/meta ") || stripped === "/meta") {
+                  const streamId = event.message.stream_id;
+                  const topicName = event.message.subject;
+                  if (streamId != null && topicName) {
+                    const response = handleMetaCommand(
+                      metadataStore,
+                      { streamId, topicName },
+                      stripped,
+                    );
+                    const target = buildInboundTarget(msg, accountId);
+                    await sendMessageZulip(target, response, { accountId });
+                  }
+                  return;
+                }
+
                 const target = buildInboundTarget(msg, accountId);
                 ctx.log?.info?.(`zulip: inbound from ${msg.senderEmail} → ${target}`);
+
 
                 // Dispatch to AI via channelRuntime if available.
                 // Uses finalizeInboundContext → dispatchReplyWithBufferedBlockDispatcher
                 // pattern (see qqbot/discord adapters for reference).
                 if (ctx.channelRuntime) {
-                  const ctxPayload = ctx.channelRuntime.reply.finalizeInboundContext({
+                  const reply = ctx.channelRuntime.reply as any;
+                  const ctxPayload = reply.finalizeInboundContext({
                     Body: msg.text,
                     BodyForAgent: msg.text,
                     RawBody: msg.text,
@@ -136,7 +169,7 @@ export const zulipPlugin: ChannelPlugin<ResolvedZulipAccount, ZulipProbe> = crea
                     CommandAuthorized: false,
                   });
 
-                  await ctx.channelRuntime.reply.dispatchReplyWithBufferedBlockDispatcher({
+                  await reply.dispatchReplyWithBufferedBlockDispatcher({
                     ctx: ctxPayload,
                     cfg: ctx.cfg,
                     dispatcherOptions: {
@@ -150,9 +183,14 @@ export const zulipPlugin: ChannelPlugin<ResolvedZulipAccount, ZulipProbe> = crea
                   });
                 }
               },
+              onTopicRename: async (streamId, oldTopic, newTopic) => {
+                syncPrefixToMetadata(metadataStore, streamId, oldTopic, newTopic);
+                ctx.log?.info?.(`zulip: topic renamed: "${oldTopic}" → "${newTopic}"`);
+              },
               onError: (err) => {
                 ctx.log?.info?.(`zulip: gateway error: ${String(err)}`);
               },
+
               onConnected: (info) => {
                 ctx.log?.info?.(`zulip: connected (queue=${info.queueId})`);
               },
@@ -161,7 +199,11 @@ export const zulipPlugin: ChannelPlugin<ResolvedZulipAccount, ZulipProbe> = crea
             { abortSignal: ctx.abortSignal },
           );
           return {
-            stop: () => handle.stop(),
+            stop: async () => {
+              await handle.stop();
+              db.close();
+              ctx.log?.info?.("zulip: metadata store closed");
+            },
           };
         },
       },

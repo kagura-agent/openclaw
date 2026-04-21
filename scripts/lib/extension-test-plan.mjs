@@ -20,6 +20,7 @@ import { isTelegramExtensionRoot } from "../../test/vitest/vitest.extension-tele
 import { isVoiceCallExtensionRoot } from "../../test/vitest/vitest.extension-voice-call-paths.mjs";
 import { isWhatsAppExtensionRoot } from "../../test/vitest/vitest.extension-whatsapp-paths.mjs";
 import { isZaloExtensionRoot } from "../../test/vitest/vitest.extension-zalo-paths.mjs";
+import { isZulipExtensionRoot } from "../../test/vitest/vitest.extension-zulip-paths.mjs";
 import { BUNDLED_PLUGIN_PATH_PREFIX, BUNDLED_PLUGIN_ROOT_DIR } from "./bundled-plugin-paths.mjs";
 import { listAvailableExtensionIds } from "./changed-extensions.mjs";
 
@@ -127,6 +128,7 @@ export function resolveExtensionTestPlan(params = {}) {
   const usesVoiceCallConfig = roots.some((root) => isVoiceCallExtensionRoot(root));
   const usesWhatsAppConfig = roots.some((root) => isWhatsAppExtensionRoot(root));
   const usesZaloConfig = roots.some((root) => isZaloExtensionRoot(root));
+  const usesZulipConfig = roots.some((root) => isZulipExtensionRoot(root));
   const usesMatrixConfig = roots.some((root) => isMatrixExtensionRoot(root));
   const usesMemoryConfig = roots.some((root) => isMemoryExtensionRoot(root));
   const usesMsTeamsConfig = roots.some((root) => isMsTeamsExtensionRoot(root));
@@ -159,17 +161,19 @@ export function resolveExtensionTestPlan(params = {}) {
                           ? "test/vitest/vitest.extension-whatsapp.config.ts"
                           : usesZaloConfig
                             ? "test/vitest/vitest.extension-zalo.config.ts"
-                            : usesMemoryConfig
-                              ? "test/vitest/vitest.extension-memory.config.ts"
-                              : usesMsTeamsConfig
-                                ? "test/vitest/vitest.extension-msteams.config.ts"
-                                : usesMessagingConfig
-                                  ? "test/vitest/vitest.extension-messaging.config.ts"
-                                  : usesProviderOpenAiConfig
-                                    ? "test/vitest/vitest.extension-provider-openai.config.ts"
-                                    : usesProviderConfig
-                                      ? "test/vitest/vitest.extension-providers.config.ts"
-                                      : "test/vitest/vitest.extensions.config.ts";
+                            : usesZulipConfig
+                              ? "test/vitest/vitest.extension-zulip.config.ts"
+                              : usesMemoryConfig
+                                ? "test/vitest/vitest.extension-memory.config.ts"
+                                : usesMsTeamsConfig
+                                  ? "test/vitest/vitest.extension-msteams.config.ts"
+                                  : usesMessagingConfig
+                                    ? "test/vitest/vitest.extension-messaging.config.ts"
+                                    : usesProviderOpenAiConfig
+                                      ? "test/vitest/vitest.extension-provider-openai.config.ts"
+                                      : usesProviderConfig
+                                        ? "test/vitest/vitest.extension-providers.config.ts"
+                                        : "test/vitest/vitest.extensions.config.ts";
   const testFileCount = roots.reduce(
     (sum, root) => sum + countTestFiles(path.join(repoRoot, root)),
     0,
