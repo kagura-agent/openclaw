@@ -9,10 +9,11 @@
  */
 
 import { ZulipClient, ZulipApiRequestError } from "./client.js";
-import type { ZulipClientConfig, MessageEvent } from "./types.js";
+import type { ZulipClientConfig, MessageEvent, UpdateMessageEvent } from "./types.js";
 
 export interface GatewayCallbacks {
   onMessage: (event: MessageEvent) => void | Promise<void>;
+  onTopicRename?: (streamId: number, oldTopic: string, newTopic: string) => void | Promise<void>;
   onError?: (error: unknown) => void;
   onConnected?: (info: { queueId: string; zulipVersion: string }) => void;
   onReconnect?: () => void;
@@ -43,7 +44,7 @@ export function startZulipGateway(
       try {
         // Register event queue
         const reg = await client.registerQueue({
-          event_types: ["message", "heartbeat"],
+          event_types: ["message", "heartbeat", "update_message"],
           apply_markdown: true,
           all_public_streams: false,
         });
@@ -77,6 +78,22 @@ export function startZulipGateway(
               }
             }
             // heartbeat events just advance lastEventId
+
+            if (event.type === "update_message") {
+              const ume = event;
+              if (
+                ume.orig_subject != null &&
+                ume.subject != null &&
+                ume.orig_subject !== ume.subject &&
+                ume.stream_id != null
+              ) {
+                try {
+                  await callbacks.onTopicRename?.(ume.stream_id, ume.orig_subject, ume.subject);
+                } catch (err) {
+                  callbacks.onError?.(err);
+                }
+              }
+            }
           }
         }
       } catch (err) {

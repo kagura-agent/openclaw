@@ -151,7 +151,11 @@ describe("startZulipGateway", () => {
 
     const handle = startZulipGateway(
       TEST_CONFIG,
-      { onMessage: (e) => { messages.push(e); } },
+      {
+        onMessage: (e) => {
+          messages.push(e);
+        },
+      },
       { ownUserId: 42, abortSignal: ac.signal },
     );
 
@@ -222,5 +226,122 @@ describe("startZulipGateway", () => {
     await handle.stop();
 
     expect(reconnects).toHaveLength(1);
+  });
+
+  it("dispatches onTopicRename for update_message with subject change", async () => {
+    const renames: { streamId: number; oldTopic: string; newTopic: string }[] = [];
+    const ac = new AbortController();
+
+    fetchSpy.mockResolvedValueOnce(
+      mockFetchResponse({
+        result: "success",
+        queue_id: "q-3",
+        last_event_id: -1,
+        zulip_version: "10.0",
+        zulip_feature_level: 300,
+        idle_queue_timeout_secs: 600,
+        max_message_length: 10000,
+        max_topic_length: 60,
+        max_file_upload_size_mib: 25,
+      }),
+    );
+
+    fetchSpy.mockResolvedValueOnce(
+      mockFetchResponse({
+        result: "success",
+        events: [
+          {
+            type: "update_message",
+            id: 0,
+            message_id: 500,
+            stream_id: 7,
+            orig_subject: "🔴 login bug",
+            subject: "🟡 login bug",
+            propagate_mode: "change_all",
+          },
+        ],
+      }),
+    );
+
+    fetchSpy.mockImplementation(async () => {
+      ac.abort();
+      return mockFetchResponse({ result: "success", events: [] });
+    });
+
+    const handle = startZulipGateway(
+      TEST_CONFIG,
+      {
+        onMessage: () => {},
+        onTopicRename: (streamId, oldTopic, newTopic) => {
+          renames.push({ streamId, oldTopic, newTopic });
+        },
+      },
+      { abortSignal: ac.signal },
+    );
+
+    await new Promise((r) => setTimeout(r, 100));
+    await handle.stop();
+
+    expect(renames).toHaveLength(1);
+    expect(renames[0]).toEqual({
+      streamId: 7,
+      oldTopic: "🔴 login bug",
+      newTopic: "🟡 login bug",
+    });
+  });
+
+  it("ignores update_message when subject did not change", async () => {
+    const renames: unknown[] = [];
+    const ac = new AbortController();
+
+    fetchSpy.mockResolvedValueOnce(
+      mockFetchResponse({
+        result: "success",
+        queue_id: "q-4",
+        last_event_id: -1,
+        zulip_version: "10.0",
+        zulip_feature_level: 300,
+        idle_queue_timeout_secs: 600,
+        max_message_length: 10000,
+        max_topic_length: 60,
+        max_file_upload_size_mib: 25,
+      }),
+    );
+
+    fetchSpy.mockResolvedValueOnce(
+      mockFetchResponse({
+        result: "success",
+        events: [
+          {
+            type: "update_message",
+            id: 0,
+            message_id: 501,
+            stream_id: 7,
+            // content-only edit, no subject fields
+          },
+        ],
+      }),
+    );
+
+    fetchSpy.mockImplementation(async () => {
+      ac.abort();
+      return mockFetchResponse({ result: "success", events: [] });
+    });
+
+    const handle = startZulipGateway(
+      TEST_CONFIG,
+      {
+        onMessage: () => {},
+        onTopicRename: () => {
+          renames.push(true);
+        },
+      },
+      { abortSignal: ac.signal },
+    );
+
+    await new Promise((r) => setTimeout(r, 100));
+    await handle.stop();
+
+    expect(renames).toHaveLength(0);
   });
 });
