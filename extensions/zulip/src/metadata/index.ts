@@ -5,6 +5,8 @@ export { parseMetaCommand, isParseError } from "./command-parser.ts";
 export type { ParsedCommand, ParseResult, ParseError, CommandAction } from "./command-parser.ts";
 export { handleMetaCommand } from "./command-handler.ts";
 export type { CommandContext } from "./command-handler.ts";
+export { syncPrefixToMetadata, extractStatusPrefix, inferStatusFromRename } from "./prefix-sync.ts";
+export type { MetadataStatus, PrefixExtraction } from "./prefix-sync.ts";
 export type {
   MetadataFilter,
   TopicMetadata,
