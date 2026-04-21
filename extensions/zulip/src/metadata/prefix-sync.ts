@@ -49,3 +49,23 @@ export function inferStatusFromRename(oldTopic: string, newTopic: string): Metad
   // Prefix changed — return new status (or null if prefix was removed)
   return newExtracted.status;
 }
+
+/**
+ * Sync a topic rename to the metadata store.
+ * Updates the topic name and, if the emoji prefix changed, infers a status transition.
+ */
+export function syncPrefixToMetadata(
+  store: {
+    handleRename(streamId: number, oldName: string, newName: string): void;
+    upsert(streamId: number, topicName: string, updates: { status?: MetadataStatus }): unknown;
+  },
+  streamId: number,
+  oldTopic: string,
+  newTopic: string,
+): void {
+  store.handleRename(streamId, oldTopic, newTopic);
+  const newStatus = inferStatusFromRename(oldTopic, newTopic);
+  if (newStatus) {
+    store.upsert(streamId, newTopic, { status: newStatus });
+  }
+}

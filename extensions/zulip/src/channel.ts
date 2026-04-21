@@ -1,5 +1,5 @@
-import { homedir } from "node:os";
-import { join } from "node:path";
+import os from "node:os";
+import path from "node:path";
 import { createChatChannelPlugin } from "openclaw/plugin-sdk/channel-core";
 import type { ChannelPlugin } from "openclaw/plugin-sdk/channel-core";
 import type { OpenClawConfig } from "openclaw/plugin-sdk/config-runtime";
@@ -7,8 +7,12 @@ import { ZulipClient } from "./client.js";
 import { ZulipChannelConfigSchema } from "./config-schema.js";
 import { startZulipGateway } from "./gateway.js";
 import { normalizeZulipEvent, buildInboundTarget } from "./inbound.js";
-import { initMetadataStore, destroyMetadataStore, handleMetaCommand } from "./metadata/index.js";
-import { inferStatusFromRename } from "./metadata/prefix-sync.js";
+import {
+  initDatabase,
+  MetadataStore,
+  handleMetaCommand,
+  syncPrefixToMetadata,
+} from "./metadata/index.js";
 import { normalizeZulipMessagingTarget } from "./normalize.js";
 import { zulipOutboundBaseAdapter } from "./outbound-base.js";
 import { secretTargetRegistryEntries, collectRuntimeConfigAssignments } from "./secret-contract.js";
@@ -102,10 +106,10 @@ export const zulipPlugin: ChannelPlugin<ResolvedZulipAccount, ZulipProbe> = crea
           const ownUserId = ownUser.user_id;
           ctx.log?.info?.(`zulip: bot user_id=${ownUserId} (${ownUser.email})`);
 
-          // Initialize metadata store
-          const dbPath = join(homedir(), ".openclaw", "data", "zulip-metadata.sqlite");
-          const metaStore = initMetadataStore(dbPath);
-          ctx.log?.info?.(`zulip: metadata store initialized at ${dbPath}`);
+          // Initialize metadata subsystem
+          const dbPath = path.join(os.homedir(), ".openclaw", "data", "zulip-metadata.sqlite");
+          const db = initDatabase(dbPath);
+          const metadataStore = new MetadataStore(db);
 
           const accountId = ctx.accountId ?? "default";
           const handle = startZulipGateway(
@@ -125,7 +129,7 @@ export const zulipPlugin: ChannelPlugin<ResolvedZulipAccount, ZulipProbe> = crea
                   const topicName = event.message.subject;
                   if (streamId != null && topicName) {
                     const response = handleMetaCommand(
-                      metaStore,
+                      metadataStore,
                       { streamId, topicName },
                       stripped,
                     );
@@ -137,6 +141,7 @@ export const zulipPlugin: ChannelPlugin<ResolvedZulipAccount, ZulipProbe> = crea
 
                 const target = buildInboundTarget(msg, accountId);
                 ctx.log?.info?.(`zulip: inbound from ${msg.senderEmail} → ${target}`);
+
 
                 // Dispatch to AI via channelRuntime if available.
                 // Uses finalizeInboundContext → dispatchReplyWithBufferedBlockDispatcher
@@ -177,18 +182,14 @@ export const zulipPlugin: ChannelPlugin<ResolvedZulipAccount, ZulipProbe> = crea
                   });
                 }
               },
+              onTopicRename: async (streamId, oldTopic, newTopic) => {
+                syncPrefixToMetadata(metadataStore, streamId, oldTopic, newTopic);
+                ctx.log?.info?.(`zulip: topic renamed: "${oldTopic}" → "${newTopic}"`);
+              },
               onError: (err) => {
                 ctx.log?.info?.(`zulip: gateway error: ${String(err)}`);
               },
-              onTopicRename: (streamId, oldTopic, newTopic) => {
-                ctx.log?.info?.(`zulip: topic renamed [${streamId}] "${oldTopic}" → "${newTopic}"`);
-                metaStore.handleRename(streamId, oldTopic, newTopic);
-                const status = inferStatusFromRename(oldTopic, newTopic);
-                if (status) {
-                  metaStore.upsert(streamId, newTopic, { status });
-                  ctx.log?.info?.(`zulip: status inferred from prefix: ${status}`);
-                }
-              },
+
               onConnected: (info) => {
                 ctx.log?.info?.(`zulip: connected (queue=${info.queueId})`);
               },
@@ -199,7 +200,7 @@ export const zulipPlugin: ChannelPlugin<ResolvedZulipAccount, ZulipProbe> = crea
           return {
             stop: async () => {
               await handle.stop();
-              destroyMetadataStore();
+              db.close();
               ctx.log?.info?.("zulip: metadata store closed");
             },
           };
