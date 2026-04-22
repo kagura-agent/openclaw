@@ -191,17 +191,24 @@ export class ZulipClient {
   }
 
   private async rawFetch(url: string, init: RequestInit): Promise<Response> {
-    const res = await fetch(url, init);
+    const maxRetries = 5;
+    let attempt = 0;
 
-    // Handle rate limiting
-    if (res.status === 429) {
+    while (true) {
+      const res = await fetch(url, init);
+
+      if (res.status !== 429 || attempt >= maxRetries) {
+        return res;
+      }
+
+      // Exponential backoff with jitter, respecting Retry-After header
       const retryAfter = res.headers.get("Retry-After");
-      const waitMs = retryAfter ? Number(retryAfter) * 1000 : 5000;
+      const baseMs = retryAfter ? Number(retryAfter) * 1000 : 1000 * 2 ** attempt;
+      const jitter = Math.random() * 1000;
+      const waitMs = Math.min(baseMs + jitter, 60_000);
       await new Promise((r) => setTimeout(r, waitMs));
-      return fetch(url, init);
+      attempt++;
     }
-
-    return res;
   }
 
   private async parseResponse<T>(res: Response): Promise<T> {

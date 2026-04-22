@@ -40,6 +40,8 @@ export function startZulipGateway(
   let currentQueueId: string | undefined;
 
   const loop = (async () => {
+    let consecutiveErrors = 0;
+
     while (running && !opts?.abortSignal?.aborted) {
       try {
         // Register event queue
@@ -55,6 +57,9 @@ export function startZulipGateway(
           queueId: reg.queue_id,
           zulipVersion: reg.zulip_version,
         });
+
+        // Reset backoff on successful connection
+        consecutiveErrors = 0;
 
         // Poll loop
         while (running && !opts?.abortSignal?.aborted) {
@@ -101,16 +106,40 @@ export function startZulipGateway(
           break;
         }
 
+        // Best-effort cleanup of stale queue before re-registering
+        if (currentQueueId) {
+          try {
+            await client.deleteQueue(currentQueueId);
+          } catch {
+            // Ignore — queue may already be gone
+          }
+          currentQueueId = undefined;
+        }
+
         if (err instanceof ZulipApiRequestError && err.code === "BAD_EVENT_QUEUE_ID") {
           callbacks.log?.("zulip: event queue expired, re-registering...");
           callbacks.onReconnect?.();
-          currentQueueId = undefined;
           continue;
         }
 
+        // Exponential backoff with jitter (cap at 5 minutes)
+        const isRateLimit =
+          err instanceof ZulipApiRequestError &&
+          String(err.message).includes("rate limit");
+        const baseDelay = isRateLimit ? 30_000 : 5_000;
+        const backoffDelay = Math.min(
+          baseDelay * 2 ** consecutiveErrors,
+          300_000,
+        );
+        const jitter = Math.random() * 5_000;
+        const delay = backoffDelay + jitter;
+        consecutiveErrors++;
+
         callbacks.onError?.(err);
-        callbacks.log?.(`zulip: gateway error, retrying in 5s: ${String(err)}`);
-        await new Promise((r) => setTimeout(r, 5000));
+        callbacks.log?.(
+          `zulip: gateway error, retrying in ${Math.round(delay / 1000)}s (attempt ${consecutiveErrors}): ${String(err)}`,
+        );
+        await new Promise((r) => setTimeout(r, delay));
       }
     }
   })();
