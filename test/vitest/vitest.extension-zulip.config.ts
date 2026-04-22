@@ -1,11 +1,19 @@
 import { zulipExtensionTestRoots } from "./vitest.extension-zulip-paths.mjs";
+import { loadPatternListFromEnv } from "./vitest.pattern-file.ts";
 import { createScopedVitestConfig } from "./vitest.scoped-config.ts";
+
+export function loadIncludePatternsFromEnv(
+  env: Record<string, string | undefined> = process.env,
+): string[] | null {
+  return loadPatternListFromEnv("OPENCLAW_VITEST_INCLUDE_FILE", env);
+}
 
 export function createExtensionZulipVitestConfig(
   env: Record<string, string | undefined> = process.env,
 ) {
   return createScopedVitestConfig(
-    zulipExtensionTestRoots.map((root) => `${root}/**/*.test.ts`),
+    loadIncludePatternsFromEnv(env) ??
+      zulipExtensionTestRoots.map((root) => `${root}/**/*.test.ts`),
     {
       dir: "extensions",
       env,
