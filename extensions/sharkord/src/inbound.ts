@@ -1,34 +1,30 @@
-/**
- * Sharkord inbound — normalize bridge events into OpenClaw inbound context.
- */
-
-import type { SharkordBridgeEvent, SharkordInboundMessage } from "./types.js";
+import type { BridgeEvent, SharkordInboundMessage } from "./types.js";
 
 /**
- * Convert a raw bridge event into a normalized inbound message.
+ * Normalize a bridge event into an internal inbound message.
  */
-export function normalizeBridgeEvent(event: SharkordBridgeEvent): SharkordInboundMessage {
-  // Treat all bridge messages as group (channel) messages by default.
-  // DM detection would require the bridge to signal it; extend later.
-  const isDm = event.channelId.startsWith("dm:");
-
+export function normalizeBridgeEvent(event: BridgeEvent): SharkordInboundMessage {
   return {
     messageId: event.messageId,
-    channelId: isDm ? event.channelId.slice("dm:".length) : event.channelId,
+    channelId: event.channelId,
     userId: event.userId,
+    userName: event.userName,
     text: event.content,
     htmlContent: event.htmlContent,
     timestamp: event.timestamp,
-    isGroup: !isDm,
+    isGroup: true, // Sharkord channels are group by default; DM detection TBD
+    parentMessageId: event.parentMessageId,
+    replyToMessageId: event.replyToMessageId,
   };
 }
 
 /**
- * Build the OpenClaw target string for routing.
+ * Build the OpenClaw session target string from an inbound message.
+ * Format: sharkord:channel:<channelId> for group, sharkord:dm:<userId> for DMs.
  */
-export function buildInboundTarget(msg: SharkordInboundMessage): string {
+export function buildInboundTarget(msg: SharkordInboundMessage, accountId: string): string {
   if (msg.isGroup) {
-    return `sharkord:${msg.channelId}`;
+    return `sharkord:${accountId}:channel:${msg.channelId}`;
   }
-  return `sharkord:dm:${msg.userId}`;
+  return `sharkord:${accountId}:dm:${msg.userId ?? "unknown"}`;
 }

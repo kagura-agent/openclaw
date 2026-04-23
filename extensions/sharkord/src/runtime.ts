@@ -1,11 +1,6 @@
 import { createPluginRuntimeStore } from "openclaw/plugin-sdk/runtime-store";
-
-export interface SharkordPluginRuntime {
-  bridgeUrl: string;
-  bridgeSecret: string;
-}
+import type { PluginRuntime } from "./runtime-api.js";
 
 const { setRuntime: setSharkordRuntime, getRuntime: getSharkordRuntime } =
-  createPluginRuntimeStore<SharkordPluginRuntime>("Sharkord runtime not initialized");
-
+  createPluginRuntimeStore<PluginRuntime>("Sharkord runtime not initialized");
 export { getSharkordRuntime, setSharkordRuntime };

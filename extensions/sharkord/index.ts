@@ -3,7 +3,7 @@ import { defineBundledChannelEntry } from "openclaw/plugin-sdk/channel-entry-con
 export default defineBundledChannelEntry({
   id: "sharkord",
   name: "Sharkord",
-  description: "Sharkord channel plugin (bridge architecture)",
+  description: "Sharkord channel plugin via bridge",
   importMetaUrl: import.meta.url,
   plugin: {
     specifier: "./channel-plugin-api.js",

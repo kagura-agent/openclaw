@@ -1,89 +1,70 @@
-/**
- * Sharkord message sending — HTTP client to POST to bridge /send endpoint.
- */
-
-import { normalizeSharkordMessagingTarget, extractTargetId } from "./normalize.js";
-import type { SharkordSendRequest, SharkordSendResponse } from "./types.js";
-
-export interface SharkordBridgeConfig {
-  bridgeUrl: string;
-  bridgeSecret: string;
-}
-
-export interface SendSharkordOptions {
-  bridge?: SharkordBridgeConfig;
-  replyTo?: string;
-  parentMessageId?: string;
-}
-
-export interface SendSharkordResult {
-  messageId: string;
-  target: string;
-}
-
-let defaultBridge: SharkordBridgeConfig | undefined;
-
-export function setDefaultBridge(bridge: SharkordBridgeConfig): void {
-  defaultBridge = bridge;
-}
-
-function resolveBridge(opts: SendSharkordOptions): SharkordBridgeConfig {
-  if (opts.bridge) {
-    return opts.bridge;
-  }
-  if (defaultBridge) {
-    return defaultBridge;
-  }
-  throw new Error("No Sharkord bridge config available — provide bridge URL and secret");
-}
+import type { BridgeSendRequest, BridgeSendResponse } from "./types.js";
 
 /**
- * Send a text message to a Sharkord channel via the bridge.
+ * Send a message to Sharkord via the bridge plugin's /send endpoint.
  */
 export async function sendMessageSharkord(
-  to: string,
-  text: string,
-  opts: SendSharkordOptions = {},
-): Promise<SendSharkordResult> {
-  const normalized = normalizeSharkordMessagingTarget(to);
-  if (!normalized) {
-    throw new Error(`Invalid Sharkord target: ${to}`);
-  }
-
-  const payload = text.trim();
-  if (!payload) {
-    throw new Error("Message must be non-empty for Sharkord sends");
-  }
-
-  const bridge = resolveBridge(opts);
-  const channelId = extractTargetId(normalized);
-
-  const body: SharkordSendRequest = {
-    channelId,
-    content: payload,
+  bridgeUrl: string,
+  bridgeSecret: string | undefined,
+  request: BridgeSendRequest,
+): Promise<BridgeSendResponse> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
   };
-  if (opts.replyTo) {
-    body.replyTo = opts.replyTo;
-  }
-  if (opts.parentMessageId) {
-    body.parentMessageId = opts.parentMessageId;
+  if (bridgeSecret) {
+    headers["Authorization"] = `Bearer ${bridgeSecret}`;
   }
 
-  const url = `${bridge.bridgeUrl.replace(/\/+$/, "")}/send`;
-  const res = await fetch(url, {
+  const res = await fetch(`${bridgeUrl}/send`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${bridge.bridgeSecret}`,
-    },
-    body: JSON.stringify(body),
+    headers,
+    body: JSON.stringify(request),
   });
 
   if (!res.ok) {
-    const errText = await res.text().catch(() => "");
-    throw new Error(`Sharkord bridge /send failed (${res.status}): ${errText}`);
+    const body = await res.text().catch(() => "");
+    throw new Error(`Bridge /send failed: ${res.status} ${body}`);
   }
 
-  const result = (await res.json()) as SharkordSendResponse;
-  return { messageId: result.messageId, target: normalized };
+  return (await res.json()) as BridgeSendResponse;
+}
+
+/**
+ * Send a text message to a Sharkord channel, returning the message ID.
+ * Wraps plain text in <p> tags for HTML content.
+ */
+export async function sendTextToSharkord(
+  target: string,
+  text: string,
+  opts: {
+    bridgeUrl: string;
+    bridgeSecret?: string;
+    accountId?: string;
+    replyTo?: string;
+    parentMessageId?: string;
+  },
+): Promise<{ messageId: string; target: string }> {
+  // Parse channelId from target string (sharkord:<accountId>:channel:<channelId>)
+  const parts = target.split(":");
+  const channelId = parseInt(parts[parts.length - 1] ?? "0", 10);
+
+  // Wrap plain text in paragraph tags for HTML
+  const htmlContent = `<p>${escapeHtml(text)}</p>`;
+
+  const result = await sendMessageSharkord(opts.bridgeUrl, opts.bridgeSecret, {
+    channelId,
+    content: htmlContent,
+    replyTo: opts.replyTo,
+    parentMessageId: opts.parentMessageId,
+  });
+
+  return { messageId: result.messageId, target };
+}
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
