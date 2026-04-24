@@ -1,0 +1,12 @@
+{
+  "id": "sharkord",
+  "channels": ["sharkord"],
+  "channelEnvVars": {
+    "sharkord": ["SHARKORD_BRIDGE_URL", "SHARKORD_BRIDGE_SECRET"]
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}
