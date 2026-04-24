@@ -18,6 +18,7 @@ import {
   providerOpenAiExtensionTestRoots,
 } from "./vitest.extension-provider-paths.mjs";
 import { qaExtensionTestRoots } from "./vitest.extension-qa-paths.mjs";
+import { sharkordExtensionTestRoots } from "./vitest.extension-sharkord-paths.mjs";
 import { telegramExtensionTestRoots } from "./vitest.extension-telegram-paths.mjs";
 import { voiceCallExtensionTestRoots } from "./vitest.extension-voice-call-paths.mjs";
 import { whatsAppExtensionTestRoots } from "./vitest.extension-whatsapp-paths.mjs";
@@ -64,6 +65,7 @@ export function createExtensionsVitestConfig(
       ...voiceCallExtensionTestRoots.map((root) => `${root.replace(/^extensions\//u, "")}/**`),
       ...whatsAppExtensionTestRoots.map((root) => `${root.replace(/^extensions\//u, "")}/**`),
       ...zaloExtensionTestRoots.map((root) => `${root.replace(/^extensions\//u, "")}/**`),
+      ...sharkordExtensionTestRoots.map((root) => `${root.replace(/^extensions\//u, "")}/**`),
     ],
   });
 }

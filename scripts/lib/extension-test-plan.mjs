@@ -20,6 +20,7 @@ import {
   isProviderOpenAiExtensionRoot,
 } from "../../test/vitest/vitest.extension-provider-paths.mjs";
 import { isQaExtensionRoot } from "../../test/vitest/vitest.extension-qa-paths.mjs";
+import { isSharkordExtensionRoot } from "../../test/vitest/vitest.extension-sharkord-paths.mjs";
 import { isTelegramExtensionRoot } from "../../test/vitest/vitest.extension-telegram-paths.mjs";
 import { isVoiceCallExtensionRoot } from "../../test/vitest/vitest.extension-voice-call-paths.mjs";
 import { isWhatsAppExtensionRoot } from "../../test/vitest/vitest.extension-whatsapp-paths.mjs";
@@ -159,6 +160,7 @@ export function resolveExtensionTestPlan(params = {}) {
   const usesVoiceCallConfig = roots.some((root) => isVoiceCallExtensionRoot(root));
   const usesWhatsAppConfig = roots.some((root) => isWhatsAppExtensionRoot(root));
   const usesZaloConfig = roots.some((root) => isZaloExtensionRoot(root));
+  const usesSharkordConfig = roots.some((root) => isSharkordExtensionRoot(root));
   const usesMatrixConfig = roots.some((root) => isMatrixExtensionRoot(root));
   const usesQaConfig = roots.some((root) => isQaExtensionRoot(root));
   const usesMemoryConfig = roots.some((root) => isMemoryExtensionRoot(root));
@@ -206,11 +208,13 @@ export function resolveExtensionTestPlan(params = {}) {
                                         ? "test/vitest/vitest.extension-whatsapp.config.ts"
                                         : usesZaloConfig
                                           ? "test/vitest/vitest.extension-zalo.config.ts"
-                                          : usesProviderOpenAiConfig
-                                            ? "test/vitest/vitest.extension-provider-openai.config.ts"
-                                            : usesProviderConfig
-                                              ? "test/vitest/vitest.extension-providers.config.ts"
-                                              : "test/vitest/vitest.extensions.config.ts";
+                                          : usesSharkordConfig
+                                            ? "test/vitest/vitest.extension-sharkord.config.ts"
+                                            : usesProviderOpenAiConfig
+                                              ? "test/vitest/vitest.extension-provider-openai.config.ts"
+                                              : usesProviderConfig
+                                                ? "test/vitest/vitest.extension-providers.config.ts"
+                                                : "test/vitest/vitest.extensions.config.ts";
   const testFileCount = roots.reduce(
     (sum, root) => sum + countTestFiles(path.join(repoRoot, root)),
     0,
