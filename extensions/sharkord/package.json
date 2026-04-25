@@ -1,0 +1,28 @@
+{
+  "name": "@openclaw/sharkord",
+  "version": "0.1.0",
+  "description": "OpenClaw Sharkord channel plugin (bridge architecture)",
+  "type": "module",
+  "devDependencies": {
+    "@openclaw/plugin-sdk": "workspace:*"
+  },
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ],
+    "channel": {
+      "id": "sharkord",
+      "label": "Sharkord",
+      "selectionLabel": "Sharkord (Bridge)",
+      "detailLabel": "Sharkord",
+      "docsPath": "/channels/sharkord",
+      "docsLabel": "sharkord",
+      "blurb": "Self-hosted Sharkord chat via HTTP bridge plugin.",
+      "aliases": [
+        "sharkord-chat"
+      ],
+      "systemImage": "network",
+      "configuredState": {}
+    }
+  }
+}
