@@ -10,6 +10,7 @@ export {
   enrichOllamaModelsWithContext,
   fetchOllamaModels,
   isReasoningModelHeuristic,
+  ollamaDiscoveredThinkingModels,
   queryOllamaContextWindow,
   queryOllamaModelShowInfo,
   resolveOllamaApiBase,

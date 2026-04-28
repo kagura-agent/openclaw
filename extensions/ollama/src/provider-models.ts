@@ -33,6 +33,14 @@ const OLLAMA_SHOW_CONCURRENCY = 8;
 const OLLAMA_CONTEXT_ENRICH_LIMIT = 200;
 const MAX_OLLAMA_SHOW_CACHE_ENTRIES = 256;
 const ollamaModelShowInfoCache = new Map<string, Promise<OllamaModelShowInfo>>();
+
+/**
+ * Synchronous set of model IDs whose `/api/show` capabilities include
+ * "thinking".  Populated during {@link enrichOllamaModelsWithContext} so that
+ * the provider-level thinking-profile resolver can determine reasoning
+ * support without needing the async catalog.
+ */
+export const ollamaDiscoveredThinkingModels = new Set<string>();
 const OLLAMA_ALWAYS_BLOCKED_HOSTNAMES = new Set(["metadata.google.internal"]);
 
 export function buildOllamaBaseUrlSsrFPolicy(baseUrl: string) {
@@ -221,6 +229,9 @@ export async function enrichOllamaModelsWithContext(
     const batchResults = await Promise.all(
       batch.map(async (model) => {
         const showInfo = await queryOllamaModelShowInfoCached(apiBase, model);
+        if (showInfo.capabilities?.includes("thinking")) {
+          ollamaDiscoveredThinkingModels.add(model.name);
+        }
         return Object.assign({}, model, {
           contextWindow: showInfo.contextWindow,
           capabilities: showInfo.capabilities,
@@ -318,4 +329,5 @@ export async function buildOllamaProvider(
 
 export function resetOllamaModelShowInfoCacheForTest(): void {
   ollamaModelShowInfoCache.clear();
+  ollamaDiscoveredThinkingModels.clear();
 }

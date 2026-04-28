@@ -22,6 +22,8 @@ import {
   buildOllamaProvider,
   configureOllamaNonInteractive,
   ensureOllamaModelPulled,
+  isReasoningModelHeuristic,
+  ollamaDiscoveredThinkingModels,
   promptAndConfigureOllama,
 } from "./api.js";
 import {
@@ -223,9 +225,11 @@ export default definePluginEntry({
       contributeResolvedModelCompat: ({ model }) =>
         usesOllamaOpenAICompatTransport(model) ? { supportsUsageInStreaming: true } : undefined,
       resolveReasoningOutputMode: () => "native",
-      resolveThinkingProfile: ({ reasoning }) => ({
+      resolveThinkingProfile: ({ reasoning, modelId }) => ({
         levels:
-          reasoning === true
+          reasoning === true ||
+          ollamaDiscoveredThinkingModels.has(modelId) ||
+          (reasoning === undefined && isReasoningModelHeuristic(modelId))
             ? [{ id: "off" }, { id: "low" }, { id: "medium" }, { id: "high" }, { id: "max" }]
             : [{ id: "off" }],
         defaultLevel: "off",

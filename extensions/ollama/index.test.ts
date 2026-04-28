@@ -24,12 +24,16 @@ const createConfiguredOllamaStreamFnMock = vi.hoisted(() =>
   vi.fn((_params: { model: unknown; providerBaseUrl?: string }) => ({}) as never),
 );
 
-vi.mock("./api.js", () => ({
-  promptAndConfigureOllama: promptAndConfigureOllamaMock,
-  ensureOllamaModelPulled: ensureOllamaModelPulledMock,
-  configureOllamaNonInteractive: vi.fn(),
-  buildOllamaProvider: buildOllamaProviderMock,
-}));
+vi.mock("./api.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./api.js")>();
+  return {
+    ...actual,
+    promptAndConfigureOllama: promptAndConfigureOllamaMock,
+    ensureOllamaModelPulled: ensureOllamaModelPulledMock,
+    configureOllamaNonInteractive: vi.fn(),
+    buildOllamaProvider: buildOllamaProviderMock,
+  };
+});
 
 vi.mock("./src/stream.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./src/stream.js")>();
@@ -778,6 +782,29 @@ describe("ollama plugin", () => {
       levels: [{ id: "off" }, { id: "low" }, { id: "medium" }, { id: "high" }, { id: "max" }],
       defaultLevel: "off",
     });
+  });
+
+  it("exposes thinking levels for discovered thinking-capable models even without catalog", async () => {
+    const { ollamaDiscoveredThinkingModels } = await import("./api.js");
+    const provider = registerProvider();
+
+    // Simulate discovery: model was seen with thinking capability
+    ollamaDiscoveredThinkingModels.add("qwen3.6:35b-a3b-mxfp8");
+
+    // Without catalog, reasoning is undefined — but discovered set should kick in
+    expect(
+      provider.resolveThinkingProfile?.({
+        provider: "ollama",
+        modelId: "qwen3.6:35b-a3b-mxfp8",
+        reasoning: undefined,
+      }),
+    ).toEqual({
+      levels: [{ id: "off" }, { id: "low" }, { id: "medium" }, { id: "high" }, { id: "max" }],
+      defaultLevel: "off",
+    });
+
+    // Clean up
+    ollamaDiscoveredThinkingModels.delete("qwen3.6:35b-a3b-mxfp8");
   });
 
   it("wraps native Ollama payloads with top-level think effort when thinking is enabled", () => {
