@@ -5,6 +5,8 @@ import {
   resolveAgentWorkspaceDir,
   resolveSessionAgentId,
 } from "../../agents/agent-scope.js";
+import { resolveEffectiveToolPolicy } from "../../agents/pi-tools.policy.js";
+import { isToolAllowedByPolicies } from "../../agents/tool-policy-match.js";
 import {
   resolveConversationBindingRecord,
   touchConversationBindingRecord,
@@ -593,6 +595,11 @@ export async function dispatchReplyFromConfig(
       undefined,
     chatType: sessionStoreEntry.entry?.chatType,
   });
+  const { globalPolicy, agentPolicy } = resolveEffectiveToolPolicy({
+    config: cfg,
+    sessionKey,
+  });
+  const messageToolAvailable = isToolAllowedByPolicies("message", [globalPolicy, agentPolicy]);
   const sourceReplyPolicy = resolveSourceReplyVisibilityPolicy({
     cfg,
     ctx,
@@ -601,6 +608,7 @@ export async function dispatchReplyFromConfig(
     suppressAcpChildUserDelivery,
     explicitSuppressTyping: params.replyOptions?.suppressTyping === true,
     shouldSuppressTyping,
+    messageToolAvailable,
   });
   const {
     sourceReplyDeliveryMode,

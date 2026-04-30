@@ -78,6 +78,39 @@ describe("resolveSourceReplyDeliveryMode", () => {
       }),
     ).toBe("automatic");
   });
+
+  it("falls back to automatic when message tool is unavailable", () => {
+    expect(
+      resolveSourceReplyDeliveryMode({
+        cfg: emptyConfig,
+        ctx: { ChatType: "group" },
+        messageToolAvailable: false,
+      }),
+    ).toBe("automatic");
+    expect(
+      resolveSourceReplyDeliveryMode({
+        cfg: globalToolOnlyReplyConfig,
+        ctx: { ChatType: "direct" },
+        messageToolAvailable: false,
+      }),
+    ).toBe("automatic");
+  });
+
+  it("keeps message_tool_only when messageToolAvailable is true or undefined", () => {
+    expect(
+      resolveSourceReplyDeliveryMode({
+        cfg: emptyConfig,
+        ctx: { ChatType: "group" },
+        messageToolAvailable: true,
+      }),
+    ).toBe("message_tool_only");
+    expect(
+      resolveSourceReplyDeliveryMode({
+        cfg: emptyConfig,
+        ctx: { ChatType: "group" },
+      }),
+    ).toBe("message_tool_only");
+  });
 });
 
 describe("resolveSourceReplyVisibilityPolicy", () => {
@@ -218,6 +251,23 @@ describe("resolveSourceReplyVisibilityPolicy", () => {
       suppressHookUserDelivery: true,
       suppressHookReplyLifecycle: true,
       suppressTyping: false,
+    });
+  });
+
+  it("falls back to automatic delivery when message tool is unavailable", () => {
+    expect(
+      resolveSourceReplyVisibilityPolicy({
+        cfg: emptyConfig,
+        ctx: { ChatType: "group" },
+        sendPolicy: "allow",
+        messageToolAvailable: false,
+      }),
+    ).toMatchObject({
+      sourceReplyDeliveryMode: "automatic",
+      suppressAutomaticSourceDelivery: false,
+      suppressDelivery: false,
+      suppressHookUserDelivery: false,
+      deliverySuppressionReason: "",
     });
   });
 });
