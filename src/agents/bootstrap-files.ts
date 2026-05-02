@@ -57,7 +57,9 @@ export function resolveContextInjectionMode(
 ): AgentContextInjection {
   if (agentId) {
     const entry = config?.agents?.list?.find((a) => a.id === agentId);
-    if (entry?.contextInjection) return entry.contextInjection;
+    if (entry?.contextInjection) {
+      return entry.contextInjection;
+    }
   }
   return config?.agents?.defaults?.contextInjection ?? "always";
 }
