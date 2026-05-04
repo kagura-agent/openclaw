@@ -99,6 +99,21 @@ function resolvePluginContractApiPath(rootDir: string): string | null {
       return candidate;
     }
   }
+  const distDir = path.join(rootDir, "dist");
+  if (fs.existsSync(distDir)) {
+    for (const extension of orderedContractApiExtensions()) {
+      const candidate = path.join(distDir, `secret-contract-api${extension}`);
+      if (fs.existsSync(candidate)) {
+        return candidate;
+      }
+    }
+    for (const extension of orderedContractApiExtensions()) {
+      const candidate = path.join(distDir, `contract-api${extension}`);
+      if (fs.existsSync(candidate)) {
+        return candidate;
+      }
+    }
+  }
   return null;
 }
 

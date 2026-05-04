@@ -65,6 +65,48 @@ module.exports = {
   };
 }
 
+function writeExternalChannelPluginInDist(params: { pluginId: string; channelId: string }) {
+  const rootDir = makeTrackedTempDir("openclaw-channel-secret-contract", tempDirs);
+  const distDir = path.join(rootDir, "dist");
+  fs.mkdirSync(distDir);
+  fs.writeFileSync(
+    path.join(distDir, "secret-contract-api.cjs"),
+    `
+module.exports = {
+  secretTargetRegistryEntries: [
+    {
+      id: "channels.${params.channelId}.token",
+      targetType: "channels.${params.channelId}.token",
+      configFile: "openclaw.json",
+      pathPattern: "channels.${params.channelId}.token",
+      secretShape: "secret_input",
+      expectedResolvedValue: "string",
+      includeInPlan: true,
+      includeInConfigure: true,
+      includeInAudit: true
+    }
+  ],
+  collectRuntimeConfigAssignments(params) {
+    params.context.assignments.push({
+      path: "channels.${params.channelId}.token",
+      ref: { source: "env", provider: "default", id: "DISCORD_BOT_TOKEN" },
+      expected: "string",
+      apply() {}
+    });
+  }
+};
+`,
+    "utf8",
+  );
+  return {
+    id: params.pluginId,
+    origin: "global",
+    channels: [params.channelId],
+    channelConfigs: {},
+    rootDir,
+  };
+}
+
 describe("external channel secret contract api", () => {
   beforeEach(() => {
     loadPluginMetadataSnapshotMock.mockReset();
@@ -77,6 +119,29 @@ describe("external channel secret contract api", () => {
 
   it("loads root secret-contract-api sidecars for external channel plugins", () => {
     const record = writeExternalChannelPlugin({ pluginId: "discord", channelId: "discord" });
+    loadPluginMetadataSnapshotMock.mockReturnValue({
+      plugins: [record],
+    });
+
+    const api = loadChannelSecretContractApi({
+      channelId: "discord",
+      config: { channels: { discord: {} } },
+      env: {},
+      loadablePluginOrigins: new Map([["discord", "global"]]),
+    });
+
+    expect(api?.secretTargetRegistryEntries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "channels.discord.token",
+        }),
+      ]),
+    );
+    expect(api?.collectRuntimeConfigAssignments).toBeTypeOf("function");
+  });
+
+  it("loads secret-contract-api from dist/ subdirectory for npm-installed plugins", () => {
+    const record = writeExternalChannelPluginInDist({ pluginId: "discord", channelId: "discord" });
     loadPluginMetadataSnapshotMock.mockReturnValue({
       plugins: [record],
     });
