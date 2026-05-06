@@ -1378,13 +1378,6 @@ describe("runWithModelFallback", () => {
   it("includes configured primary as last resort when fallbacksOverride is empty (#77766)", async () => {
     const cfg = makeFallbacksOnlyCfg();
 
-    const candidates = __testing.resolveFallbackCandidates({
-      cfg,
-      provider: "anthropic",
-      model: "claude-opus-4-5",
-      fallbacksOverride: [],
-    });
-
     await expect(
       runWithModelFallback({
         cfg,
