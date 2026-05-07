@@ -1,5 +1,5 @@
 import type { StreamFn } from "@mariozechner/pi-agent-core";
-import { streamSimple } from "@mariozechner/pi-ai";
+import { getApiProvider, streamSimple } from "@mariozechner/pi-ai";
 import { describe, expect, it, vi } from "vitest";
 import * as providerTransportStream from "../provider-transport-stream.js";
 import {
@@ -83,6 +83,23 @@ describe("describeEmbeddedAgentStreamStrategy", () => {
         } as never,
       }),
     ).toBe("session-custom");
+  });
+
+  it("routes PI native openai-completions streams through boundary-aware shaping (#78661)", () => {
+    const nativeStreamFn = getApiProvider("openai-completions")?.streamSimple;
+    expect(nativeStreamFn).toBeDefined();
+
+    expect(
+      describeEmbeddedAgentStreamStrategy({
+        currentStreamFn: nativeStreamFn,
+        shouldUseWebSocketTransport: false,
+        model: {
+          api: "openai-completions",
+          provider: "llama",
+          id: "qwen36-35b-a3b",
+        } as never,
+      }),
+    ).toBe("boundary-aware:openai-completions");
   });
 });
 
@@ -357,5 +374,34 @@ describe("resolveEmbeddedAgentStreamFn", () => {
     await expect(
       streamFn({ provider: "openai-codex", id: "gpt-5.5" } as never, { systemPrompt } as never, {}),
     ).resolves.toMatchObject({ systemPrompt });
+  });
+
+  it("routes PI native openai-completions streams through boundary-aware transport (#78661)", async () => {
+    const nativeStreamFn = getApiProvider("openai-completions")?.streamSimple;
+    expect(nativeStreamFn).toBeDefined();
+
+    const innerStreamFn = vi.fn(async (_model, _context, options) => options);
+    overrideBoundaryAwareStreamFnOnce(innerStreamFn as never);
+
+    const streamFn = resolveEmbeddedAgentStreamFn({
+      currentStreamFn: nativeStreamFn,
+      shouldUseWebSocketTransport: false,
+      sessionId: "session-1",
+      model: {
+        api: "openai-completions",
+        provider: "llama",
+        id: "qwen36-35b-a3b",
+      } as never,
+      resolvedApiKey: "local-token",
+    });
+
+    // Must NOT be the native stream — boundary-aware transport should replace it
+    expect(streamFn).not.toBe(nativeStreamFn);
+
+    await expect(
+      streamFn({ provider: "llama", id: "qwen36-35b-a3b" } as never, {} as never, {}),
+    ).resolves.toMatchObject({ apiKey: "local-token" });
+
+    expect(innerStreamFn).toHaveBeenCalledTimes(1);
   });
 });

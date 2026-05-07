@@ -1,5 +1,6 @@
 import type { StreamFn } from "@mariozechner/pi-agent-core";
-import { streamSimple } from "@mariozechner/pi-ai";
+import type { Api } from "@mariozechner/pi-ai";
+import { getApiProvider, streamSimple } from "@mariozechner/pi-ai";
 import { createAnthropicVertexStreamFnForModel } from "../anthropic-vertex-stream.js";
 import { createOpenAIWebSocketStreamFn } from "../openai-ws-stream.js";
 import { getModelProviderRequestTransport } from "../provider-request-config.js";
@@ -25,6 +26,20 @@ export function resetEmbeddedAgentBaseStreamFnCacheForTest(): void {
   embeddedAgentBaseStreamFnCache = new WeakMap<object, StreamFn | undefined>();
 }
 
+/**
+ * Returns true when `fn` is either the global `streamSimple` fallback or a
+ * PI-native API provider stream registered for the given `api`.  These are
+ * treated as defaults that OpenClaw should replace with its boundary-aware
+ * transport so that `stream_options.include_usage` is injected correctly.
+ */
+function isPiNativeDefaultStream(fn: StreamFn | undefined, api: string): boolean {
+  if (fn === undefined || fn === streamSimple) {
+    return true;
+  }
+  const nativeProvider = getApiProvider(api as Api);
+  return nativeProvider?.streamSimple === fn;
+}
+
 export function describeEmbeddedAgentStreamStrategy(params: {
   currentStreamFn: StreamFn | undefined;
   providerStreamFn?: StreamFn;
@@ -41,7 +56,7 @@ export function describeEmbeddedAgentStreamStrategy(params: {
   if (params.model.provider === "anthropic-vertex") {
     return "anthropic-vertex";
   }
-  if (params.currentStreamFn === undefined || params.currentStreamFn === streamSimple) {
+  if (isPiNativeDefaultStream(params.currentStreamFn, params.model.api)) {
     return createBoundaryAwareStreamFnForModel(params.model)
       ? `boundary-aware:${params.model.api}`
       : "stream-simple";
@@ -104,7 +119,7 @@ export function resolveEmbeddedAgentStreamFn(params: {
     return createAnthropicVertexStreamFnForModel(params.model);
   }
 
-  if (params.currentStreamFn === undefined || params.currentStreamFn === streamSimple) {
+  if (isPiNativeDefaultStream(params.currentStreamFn, params.model.api)) {
     const boundaryAwareStreamFn = createBoundaryAwareStreamFnForModel(params.model);
     if (boundaryAwareStreamFn) {
       // Boundary-aware transports read credentials from options.apiKey just
