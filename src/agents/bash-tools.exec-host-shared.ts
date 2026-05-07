@@ -15,7 +15,7 @@ import {
   type ExecApprovalDecision,
   type ExecSecurity,
 } from "../infra/exec-approvals.js";
-import { logWarn } from "../logger.js";
+import { logError, logWarn } from "../logger.js";
 import { sendExecApprovalFollowup } from "./bash-tools.exec-approval-followup.js";
 import {
   type ExecApprovalRegistration,
@@ -94,6 +94,8 @@ export type ExecApprovalFollowupTarget = {
 export type ExecApprovalFollowupResultDeps = {
   sendExecApprovalFollowup?: typeof sendExecApprovalFollowup;
   logWarn?: typeof logWarn;
+  logError?: typeof logError;
+  retryDelaysMs?: readonly number[];
 };
 
 export type DefaultExecApprovalRequestArgs = {
@@ -401,6 +403,8 @@ export function buildHeadlessExecApprovalDeniedMessage(params: {
   ].join("\n");
 }
 
+const DEFAULT_FOLLOWUP_RETRY_DELAYS_MS: readonly number[] = [2_000, 5_000];
+
 export async function sendExecApprovalFollowupResult(
   target: ExecApprovalFollowupTarget,
   resultText: string,
@@ -408,7 +412,10 @@ export async function sendExecApprovalFollowupResult(
 ): Promise<void> {
   const send = deps.sendExecApprovalFollowup ?? sendExecApprovalFollowup;
   const warn = deps.logWarn ?? logWarn;
-  await send({
+  const error_ = deps.logError ?? logError;
+  const retryDelays = deps.retryDelaysMs ?? DEFAULT_FOLLOWUP_RETRY_DELAYS_MS;
+
+  const params = {
     approvalId: target.approvalId,
     sessionKey: target.sessionKey,
     turnSourceChannel: target.turnSourceChannel,
@@ -417,14 +424,32 @@ export async function sendExecApprovalFollowupResult(
     turnSourceThreadId: target.turnSourceThreadId,
     resultText,
     direct: target.direct,
-  }).catch((error) => {
-    const message = formatErrorMessage(error);
-    const key = `${target.approvalId}:${message}`;
-    if (!rememberExecApprovalFollowupFailureKey(key)) {
-      return;
+  };
+
+  let lastError: unknown = null;
+  const maxAttempts = 1 + retryDelays.length;
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    if (attempt > 0) {
+      const delayMs = retryDelays[attempt - 1];
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
     }
-    warn(`exec approval followup dispatch failed (id=${target.approvalId}): ${message}`);
-  });
+    try {
+      await send(params);
+      return;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  const message = formatErrorMessage(lastError);
+  const key = `${target.approvalId}:${message}`;
+  if (!rememberExecApprovalFollowupFailureKey(key)) {
+    return;
+  }
+  error_(
+    `exec approval followup dispatch failed after ${maxAttempts} attempts (id=${target.approvalId}): ${message}`,
+  );
+  warn(`exec approval followup dispatch failed (id=${target.approvalId}): ${message}`);
 }
 
 export function buildExecApprovalPendingToolResult(params: {

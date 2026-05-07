@@ -48,10 +48,12 @@ beforeAll(async () => {
 describe("sendExecApprovalFollowupResult", () => {
   const sendExecApprovalFollowup = vi.fn();
   const logWarn = vi.fn();
+  const logError = vi.fn();
 
   beforeEach(() => {
     sendExecApprovalFollowup.mockReset();
     logWarn.mockReset();
+    logError.mockReset();
     mocks.resolveExecApprovals.mockReset();
     mocks.resolveExecApprovals.mockReturnValue({
       defaults: {
@@ -78,7 +80,7 @@ describe("sendExecApprovalFollowupResult", () => {
       approvalId: "approval-log-once",
       sessionKey: "agent:main:main",
     };
-    const deps = { sendExecApprovalFollowup, logWarn };
+    const deps = { sendExecApprovalFollowup, logWarn, logError, retryDelaysMs: [] as number[] };
     await sendExecApprovalFollowupResult(target, "Exec finished", deps);
     await sendExecApprovalFollowupResult(target, "Exec finished", deps);
 
@@ -90,7 +92,7 @@ describe("sendExecApprovalFollowupResult", () => {
 
   it("evicts oldest followup failure dedupe keys after reaching the cap", async () => {
     sendExecApprovalFollowup.mockRejectedValue(new Error("Channel is required"));
-    const deps = { sendExecApprovalFollowup, logWarn };
+    const deps = { sendExecApprovalFollowup, logWarn, logError, retryDelaysMs: [] as number[] };
 
     for (let i = 0; i <= maxExecApprovalFollowupFailureLogKeys; i += 1) {
       await sendExecApprovalFollowupResult(
@@ -115,6 +117,43 @@ describe("sendExecApprovalFollowupResult", () => {
     expect(logWarn).toHaveBeenLastCalledWith(
       "exec approval followup dispatch failed (id=approval-0): Channel is required",
     );
+  });
+
+  it("retries transient failures before logging", async () => {
+    sendExecApprovalFollowup
+      .mockRejectedValueOnce(new Error("gateway closed (1006 abnormal closure)"))
+      .mockResolvedValueOnce(true);
+
+    const target = {
+      approvalId: "approval-retry-success",
+      sessionKey: "agent:main:main",
+    };
+    const deps = { sendExecApprovalFollowup, logWarn, logError, retryDelaysMs: [10] };
+    await sendExecApprovalFollowupResult(target, "Exec finished", deps);
+
+    expect(sendExecApprovalFollowup).toHaveBeenCalledTimes(2);
+    expect(logWarn).not.toHaveBeenCalled();
+    expect(logError).not.toHaveBeenCalled();
+  });
+
+  it("logs error after all retry attempts are exhausted", async () => {
+    sendExecApprovalFollowup.mockRejectedValue(
+      new Error("Outbound not configured for channel: discord"),
+    );
+
+    const target = {
+      approvalId: "approval-retry-exhausted",
+      sessionKey: "agent:main:main",
+    };
+    const deps = { sendExecApprovalFollowup, logWarn, logError, retryDelaysMs: [10, 10] };
+    await sendExecApprovalFollowupResult(target, "Exec finished", deps);
+
+    expect(sendExecApprovalFollowup).toHaveBeenCalledTimes(3);
+    expect(logError).toHaveBeenCalledTimes(1);
+    expect(logError).toHaveBeenCalledWith(
+      "exec approval followup dispatch failed after 3 attempts (id=approval-retry-exhausted): Outbound not configured for channel: discord",
+    );
+    expect(logWarn).toHaveBeenCalledTimes(1);
   });
 });
 
