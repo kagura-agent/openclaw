@@ -165,4 +165,38 @@ describe("workspace bootstrap file caching", () => {
     expect(agentsFile?.missing).toBe(true);
     expect(agentsFile?.content).toBeUndefined();
   });
+
+  it.runIf(process.platform !== "win32")(
+    "loads hardlinked bootstrap files (nlink > 1)",
+    async () => {
+      const content = "# Shared rules via hardlink";
+      const workspace2 = await makeTempWorkspace("openclaw-bootstrap-hardlink-test-");
+
+      // Write the file in workspace1
+      await writeWorkspaceFile({
+        dir: workspaceDir,
+        name: DEFAULT_AGENTS_FILENAME,
+        content,
+      });
+
+      // Create a hardlink in workspace2 pointing to the same inode
+      const sourcePath = path.join(workspaceDir, DEFAULT_AGENTS_FILENAME);
+      const linkPath = path.join(workspace2, DEFAULT_AGENTS_FILENAME);
+      await fs.link(sourcePath, linkPath);
+
+      // Verify nlink > 1
+      const stat = await fs.stat(linkPath);
+      expect(stat.nlink).toBeGreaterThan(1);
+
+      // Both workspaces should load the file successfully
+      const result1 = await loadAgentsFile(workspaceDir);
+      expect(result1?.missing).toBe(false);
+      expect(result1?.content).toBe(content);
+
+      const result2 = await loadWorkspaceBootstrapFiles(workspace2);
+      const agentsFile2 = result2.find((f) => f.name === DEFAULT_AGENTS_FILENAME);
+      expect(agentsFile2?.missing).toBe(false);
+      expect(agentsFile2?.content).toBe(content);
+    },
+  );
 });

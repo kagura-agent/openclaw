@@ -71,6 +71,7 @@ async function readWorkspaceFileWithGuards(params: {
     rootPath: params.workspaceDir,
     boundaryLabel: "workspace root",
     maxBytes: MAX_WORKSPACE_BOOTSTRAP_FILE_BYTES,
+    rejectHardlinks: false,
   });
   if (!opened.ok) {
     workspaceFileCache.delete(params.filePath);

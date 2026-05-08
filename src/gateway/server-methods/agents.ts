@@ -151,7 +151,7 @@ async function statWorkspaceFileSafely(
     }
 
     const pathStat = await fs.lstat(candidatePath);
-    if (!pathStat.isFile() || pathStat.nlink > 1) {
+    if (!pathStat.isFile()) {
       return null;
     }
 
@@ -161,7 +161,7 @@ async function statWorkspaceFileSafely(
     }
 
     const realStat = await fs.stat(realPath);
-    if (!realStat.isFile() || realStat.nlink > 1 || !sameFileIdentity(pathStat, realStat)) {
+    if (!realStat.isFile() || !sameFileIdentity(pathStat, realStat)) {
       return null;
     }
 
