@@ -6,6 +6,10 @@ import { startSharkordGateway } from "./gateway.js";
 import { normalizeBridgeEvent, buildInboundTarget } from "./inbound.js";
 import { normalizeSharkordMessagingTarget } from "./normalize.js";
 import { sharkordOutboundBaseAdapter } from "./outbound-base.js";
+import {
+  SHARKORD_PRESENTATION_CAPABILITIES,
+  renderPresentationHtml,
+} from "./presentation.js";
 import { secretTargetRegistryEntries, collectRuntimeConfigAssignments } from "./secret-contract.js";
 import { sendTextToSharkord } from "./send.js";
 import type { CoreConfig, SharkordProbe } from "./types.js";
@@ -157,6 +161,17 @@ export const sharkordPlugin: ChannelPlugin<ResolvedSharkordAccount, SharkordProb
     },
     outbound: {
       base: sharkordOutboundBaseAdapter,
+      presentationCapabilities: SHARKORD_PRESENTATION_CAPABILITIES,
+      renderPresentation: ({ payload, presentation }) => {
+        const html = renderPresentationHtml({
+          presentation,
+          text: payload.text,
+        });
+        return {
+          ...payload,
+          text: html,
+        };
+      },
       attachedResults: {
         channel: "sharkord",
         sendText: async ({ to, text, accountId, replyToId }) => {

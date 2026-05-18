@@ -12,6 +12,7 @@ export type {
   MarkdownConfig,
 } from "openclaw/plugin-sdk/config-runtime";
 export type { OutboundReplyPayload } from "openclaw/plugin-sdk/reply-payload";
+export type { ChannelOutboundAdapter } from "openclaw/plugin-sdk/channel-send-result";
 export { DEFAULT_ACCOUNT_ID } from "openclaw/plugin-sdk/account-id";
 export { buildChannelConfigSchema } from "openclaw/plugin-sdk/channel-config-primitives";
 export { createPluginRuntimeStore } from "openclaw/plugin-sdk/runtime-store";
